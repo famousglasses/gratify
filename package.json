@@ -1,0 +1,33 @@
+{
+	"name": "gratify",
+	"version": "1.0.0",
+	"author": "famousglasses",
+	"description": "A full stack web app framework.",
+	"devDependencies": {
+		"grunt-cli": "^1.4.3",
+		"grunt": "^1.4.1",
+		"grunt-contrib-concat": "^1.0.1",
+		"grunt-contrib-copy": "~1.0.0",
+		"grunt-contrib-cssmin": "~2.2.1",
+		"grunt-contrib-jshint": "^1.1.0",
+		"grunt-contrib-less": "~1.4.1",
+		"grunt-contrib-uglify": "^5.0.0",
+		"grunt-md5sum": "~2.0.1",
+		"crypto": "~1.0.1"
+	},
+	"sources": [
+		"src/Functions.js",
+		"src/Prototypes.js",
+		"src/Main.js",
+		"src/Dictionary.js",
+		"src/CManager.js",
+		"src/Component.js",
+		"src/App.js",
+		"src/Web.js",
+		"src/Thread.js",
+		"src/Scanner.js",
+		"src/Client.js",
+		"src/Router.js",
+		"src/Init.js"
+	]
+}

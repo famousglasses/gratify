@@ -1,0 +1,23 @@
+{
+	"name": "famousglasses/gratify",
+	"description": "A full stack web app framework.",
+	"require": {
+		"twig/twig": "^3.0",
+		"vlucas/phpdotenv": "^5.0",
+		"sinergi/browser-detector": "^6.1"
+	},
+	"autoload": {
+		"psr-4": {
+			"Gratify\\": "lib/",
+			"App\\": "app/"
+		},
+		"files": [
+			"lib/Functions.php"
+		]
+	},
+	"scripts": {
+		"gratify": "php lib/main.php",
+		"gfy": "php lib/main.php"
+	}
+}
+
