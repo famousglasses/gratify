@@ -135,17 +135,6 @@ if (!_CLI && $_ENV['STRICT_ROUTES'] == false) {
 try {
 	$app = getApp();
 
-	if (_CLI) {
-		switch ($service) {
-			case 'system':
-			case 'sys':
-				if ($function === 'update') {
-					return $app->update();
-				}
-				break;
-		}
-	}
-
 	if (!class_exists("{$namespace}\\{$class}")) {
 		throw new NotFoundException("service '{$class}' does not exist");
 	}

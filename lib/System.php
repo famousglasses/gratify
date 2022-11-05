@@ -19,7 +19,7 @@ class System {
 	 */
 	public function update(App $app, array $request) {
 		if (!_CLI) {
-			throw new StdException('access not allowed');
+			throw new StdException('access denied');
 		}
 
 		$shell = $app->getShell();
