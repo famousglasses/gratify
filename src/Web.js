@@ -4,7 +4,7 @@ function GratifyWeb() {
 	var _this = this;
 	this.max_tries = 5;
 	this.wait = 1; // wait time before retry (in seconds)
-	this.call_stack = {};
+	this.seeds = {};
 
 	/**
 	 * Set the wait time for requests.
@@ -41,16 +41,6 @@ function GratifyWeb() {
 			return gratify.error('bad request string: ' + rqstring, 'Web::request');
 		}
 
-		// Append to call stack
-		var sig = btoa(rqstring + btoa(JSON.stringify(params)));
-		if (typeof _this.call_stack[sig] === 'undefined') {
-			_this.call_stack[sig] = {
-				tries: 0
-			};
-		}
-
-		_this.call_stack[sig].tries++;
-
 		// Setup request options
 		var method = matches[1].toLowerCase();
 		var url = matches[2];
@@ -74,7 +64,7 @@ function GratifyWeb() {
 		var version = Boolean(options.indexOf('--version') !== -1 || options.indexOf('-v') !== -1);
 		var async = Boolean(options.indexOf('--block') === -1);
 
-		var seed = Math.randint(100, 999);
+		var seed = _this.genseed();
 		gratify.say('starting ' + method.toUpperCase() + ' request #' + seed + ' to ' + url);
 
 		var data = null;
@@ -108,16 +98,36 @@ function GratifyWeb() {
 				try {
 					response = JSON.parse(response);
 				} catch (e) {
-					// do nothing
+					gratify.say('warning: failed to parse response as json');
 				} finally {
-					callback(response);
+					callback(response, seed);
 				}
+
+				delete(_this.seeds[seed]);
 			},
 			error: function(xhr, textStatus) {
+				delete(_this.seeds[seed]);
 				return gratify.error('http request error [status:' + xhr.status + '; response:' + xhr.responseText + ']', 'Web::request');
 			},
 			complete: lastly
 		});
+
+		return seed;
+	};
+
+	this.genseed = function() {
+		var seed = 0;
+
+		for (i = 0; i < 100; i++) {
+			seed = Math.randint(100000, 999999);
+			if (!Boolean(_this.seeds[seed])) {
+				break;
+			}
+		}
+
+		_this.seeds[seed] = Math.floor(Date.now() / 1000);
+
+		return seed;
 	};
 }
 

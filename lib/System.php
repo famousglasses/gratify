@@ -205,7 +205,7 @@ class System {
 
 				try {
 					$obj = new $class($app);
-					$data = $obj->{$func}($filters);
+					$data = $obj->{$func}($app, $filters);
 				} catch (Exception $e) {
 					throw new Exception("data source error: {$e->getMessage()}");
 				}

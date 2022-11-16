@@ -183,37 +183,50 @@ function GratifyMain() {
 		}, after);
 	};
 
-	this.plugin = function(target, plugin, params) {
+	this.plugin = function(target, plugin, params, orientation) {
 		try {
-			asert(target, 'string');
+			asert(target, ['string', 'object']);
 			asert(plugin, 'string');
 			asert(params, ['undefined', 'object']);
+			asert(orientation, ['undefined', 'string']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::plugin');
 		}
 
+		orientation = String(orientation);
 		params = JSON.stringify(params || {}).replaceAll('"', '&quot;');
-		var $target = $(target);
+		var $target = typeof target === 'string' ? $(target) : target;
 
 		if (!$target.length) {
 			return _this.error("plugin target '" + target + "' does not exist");
 		}
 
-		$target.html('<div gfy-plugin="' + plugin + '(' + params + ')" />');
+		var div = '<div gfy-plugin="' + plugin + '(' + params + ')"></div>';
+
+		switch (orientation.toLowerCase()) {
+			case 'append':
+				$target.append(div);
+				break;
+			default:
+			case 'replace':
+				$target.html(div);
+				break;
+		}
 	};
 
 	/**
 	 * Spawn a new component.
 	 */
-	this.spawn = function(arg1, arg2) {
+	this.spawn = function(arg1, arg2, arg3) {
 		try {
 			asert(arg1, 'object');
 			asert(arg2, ['undefined', 'object']);
+			asert(arg3, ['undefined', 'boolean']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::spawn');
 		}
 
-		return _this.cmanager.spawn(arg1, arg2);
+		return _this.cmanager.spawn(arg1, arg2, arg3);
 	};
 
 	/**

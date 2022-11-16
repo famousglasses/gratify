@@ -4,8 +4,10 @@
  */
 function GratifyScanner() {
 	var _this = this;
-
+	this.absorb_rate = 0.2;
+	this.tick_rate = 0.25;
 	this.elements = [];
+	this.index_registry = {};
 	this.tags = [
 		'gfy-var',
 		'gfy-goto',
@@ -29,7 +31,7 @@ function GratifyScanner() {
 
 		// Drop deleted elements
 		for (var x in _this.elements) {
-			var checkme = gratify.app.namespace;
+			var checkme = gratify.app.root;
 			if (gratify.client.browser == 'ie' && checkme == document) {
 				checkme = document.body;
 			}
@@ -38,7 +40,7 @@ function GratifyScanner() {
 				_this.elements.splice(x, 1);
 			}
 		}
-	}, 'gratify-scanner-absorb-dom', 0.2);
+	}, 'gratify-scanner-absorb-dom', this.absorb_rate);
 
 	gratify.thread.start(function() {
 		for (var i in _this.elements) {
@@ -72,7 +74,7 @@ function GratifyScanner() {
 
 					if (!matches) {
 						$e.prop('gfy-plugin-loaded', true);
-						return console.error('invalid gratify plugin: ' + plugin);
+						return gratify.error('invalid gratify plugin: ' + plugin);
 					}
 
 					if (String($e.attr('gfy-wait-for-auth')) === 'true') {
@@ -81,6 +83,7 @@ function GratifyScanner() {
 						}
 					}
 
+					var seed = 0;
 					var namespace = matches[1];
 					var plgName = matches[2];
 					var params = matches[4];
@@ -89,7 +92,7 @@ function GratifyScanner() {
 						try {
 							params = JSON.parse(params);
 						} catch (ex) {
-							console.error("could not parse plugin parameters: " + ex.message);
+							gratify.error("could not parse plugin parameters: " + ex.message);
 						}
 					}
 
@@ -102,59 +105,92 @@ function GratifyScanner() {
 					params.json = 1;
 
 					/* jshint ignore:start */
-					gratify.request('get ' + gratify.endpoint + '/plugin', params, function(r) {
+					seed = gratify.request('get ' + gratify.endpoint + '/plugin', params, function(r, s) {
+						var $dest = $(_this.elements[_this.index_registry[s]]);
+
+						if ($dest.length == 0) {
+							return gratify.error('destination element has gone away (seed#' + s + ')');
+						}
+
+						delete(_this.index_registry[s]);
+
+						if (typeof r !== 'object') {
+							return gratify.error('invalid response from plugin endpoint: ' + String(r));
+						}
+
 						if (r.errno) {
-							return console.error(r.error);
+							return gratify.error(r.error);
+						}
+
+						if (!r.payload) {
+							return gratify.error('empty or invalid payload received: ' + String(r.payload));
 						}
 
 						try {
-							var appspace = gratify.app.namespace;
+							var doc = document;
+							var head = doc.head || null;
+
+							if (!head) {
+								gratify.say('warning: no document head; plugin js/css will be skipped');
+							}
+
+							var root = gratify.app.root;
+							var meta = r.payload.meta;
 							var html = r.payload.html;
 							var css = r.payload.css;
-							var meta = r.payload.meta;
-							var namespace = meta.namespace;
-							var component_name = meta.component_name;
-							var plugin_class = meta.plugin_name;
 							var js = r.payload.js;
 
+							if (!meta) {
+								throw { message: 'no meta data received', code: 1 };
+							}
+
+							var namespace = meta.namespace;
+							var component_name = meta.component_name;
+							var plugin_class = namespace + '-' + meta.plugin_name;
+
 							if (html) {
-								$e.html(html);
+								$dest.html(html);
 							}
 
-							if (css) {
-								$(appspace).find('head').append('<style>' + css + '</style>');
-							}
-
-							if (js) {
-								if (typeof gratify.components[namespace] !== 'object') {
-									gratify.components[namespace] = {};
+							if (head) {
+								if (css) {
+									$(root).find('head').append('<style>' + css + '</style>');
 								}
 
-								$(appspace).find('head').append('<script>' + js + '</script>');
+								if (js) {
+									if (typeof gratify.components[namespace] !== 'object') {
+										gratify.components[namespace] = {};
+									}
 
-								var component = gratify.components[namespace][component_name];
+									$(head).append('<script>' + js + '</script>');
 
-								if (typeof component !== 'object') {
-									throw { message: "component js missing object definition '" + namespace + '.' + component_name + "'" };
-								}
+									var component = gratify.components[namespace][component_name];
 
-								component.$id = component_name;
-								var obj = gratify.spawn(component);
+									if (typeof component !== 'object') {
+										throw { message: "component js missing object definition '" + namespace + '.' + component_name + "'" };
+									}
 
-								if (obj) {
-									obj.$container = $e.find('.' + plugin_class);
+									component.$id = component_name;
+									var obj = gratify.spawn(component, {}, true);
+
+									if (obj) {
+										obj.$container = $dest.find('.' + plugin_class);
+									}
+
+									obj.$create();
 								}
 							}
 						} catch (ex) {
-							console.error('error loading plugin: ' + ex.message, ex);
+							gratify.error('error loading plugin: ' + ex.message, ex);
 						}
 					});
 
+					_this.index_registry[seed] = i;
 					$e.prop('gfy-plugin-loaded', true);
 					/* jshint ignore:end */
 				}
 			}
 		}
-	}, 'gratify-scanner-event-handler', 0.2);
+	}, 'gratify-scanner-event-handler', this.tick_rate);
 }
 

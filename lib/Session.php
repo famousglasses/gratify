@@ -1,10 +1,6 @@
 <?php
 
 namespace Gratify;
-use Sinergi\BrowserDetector\Browser;
-use Sinergi\BrowserDetector\Device;
-use Sinergi\BrowserDetector\Os;
-use Sinergi\BrowserDetector\Language;
 
 class Session {
 	/** @ignore */
@@ -23,26 +19,14 @@ class Session {
 	private $started = false;
 
 	/** @ignore */
-	public $browser;
-
-	/** @ignore */
-	public $device;
-
-	/** @ignore */
-	public $os;
-
-	/** @ignore */
-	public $language;
+	private $using_cookies;
 
 	/** @ignore */
 	public function __construct(int $driver, array $params = []) {
 		$this->driver = $driver;
 		$this->params = $params;
-		$this->useCookies(isset($params['use_cookies']) && !$params['use_cookies'] ? false : true);
-		$this->browser = new Browser();
-		$this->device = new Device();
-		$this->os = new OS();
-		$this->language = new Language();
+		$this->using_cookies = isset($params['use_cookies']) && !$params['use_cookies'] ? false : true;
+		$this->useCookies($this->using_cookies);
 	}
 
 	/** @ignore */
@@ -56,9 +40,12 @@ class Session {
 	 * @param boolean $enable TRUE to enable cookie-based sessions, FALSE otherwise.
 	 */
 	public function useCookies($enable = true) {
+		$this->using_cookies = $enable;
 		@ini_set('session.use_cookies', $enable ? 1 : 0);
 		@ini_set('session.use_only_cookies', $enable ? 1 : 0);
-		$this->id(@$_COOKIE[$this->name()]);
+		if ($enable && is_array($_COOKIE)) {
+			$this->id(@$_COOKIE[$this->name()]);
+		}
 	}
 
 	/**
@@ -70,6 +57,10 @@ class Session {
 	public function start($name = null, $id = null) {
 		if ($this->started) {
 			return true;
+		}
+
+		if (_CLI) {
+			throw new StdException("session impossible over CLI");
 		}
 
 		switch ($this->driver) {
@@ -99,6 +90,8 @@ class Session {
 		}
 
 		$this->started = true;
+
+		return true;
 	}
 
 	/**
@@ -126,8 +119,11 @@ class Session {
 	 */
 	public function end() {
 		session_destroy();
-		setcookie($this->name(), null, time() / 2);
+		if ($this->using_cookies) {
+			setcookie($this->name(), null, time() / 2);
+		}
 		$this->started = false;
+		return true;
 	}
 
 	/**

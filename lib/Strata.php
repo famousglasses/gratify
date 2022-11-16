@@ -8,6 +8,7 @@ namespace Gratify;
 class Strata extends SQLite3 {
 	const METAS = ['id', 'key', 'created', 'modified', 'deleted'];
 	const DATES = ['created', 'modified', 'deleted'];
+	const OPERATORS = ['=', '!=', 'like'];
 
 	/** @ignore */
 	private $tables = [];
@@ -27,6 +28,12 @@ class Strata extends SQLite3 {
 		}
 	}
 
+	/**
+	 * Get rows from one or more tables.
+	 *
+	 * @param string $objects A comma separated list of object definitions. An object is defined as "table.field". If field is omitted, all fields will be returned.
+	 * @param array $criteria An associative array of criteria to match on. The array should be formatted as "field" => "match value". By default, an exact match is performed, but this can be modified using an operator. Operators are added after the field expression, separated by a space (for example "field !="). Criteria can also be used to join tables together, and we do this with the "$" link modifier. The link modifier is used on the right-hand side of the array, and is followed by the joining table and field (for example "user_id" => "$users.id").
+	 */
 	public function get(string $objects, array $criteria = []): StrataResult {
 		$objects = explode(',', $objects);
 		$whats = [];
@@ -270,6 +277,7 @@ class Strata extends SQLite3 {
 
 		$index = [];
 		$value = [];
+		$uniques = [];
 		$key = '';
 
 		foreach ($data as $x => $y) {
@@ -277,6 +285,7 @@ class Strata extends SQLite3 {
 
 			$is_key = $this->expIsKey($x);
 			$is_index = $is_key || $this->expIsIndex($x);
+			$is_unique = $this->expIsUnique($x);
 			$x = $this->stripExp((string)$x);
 
 			if (!$this->propValid($x)) {
@@ -307,10 +316,17 @@ class Strata extends SQLite3 {
 				$key = md5($y);
 			}
 
+			if ($is_unique) {
+				$uniques[$x] = $y;
+			}
+
 			$value[$x] = $y;
 		}
 
 		ksort($index);
+
+		// todo add unique constraint checks
+		// will require get() OR support
 
 		$res = $this->query("
 			INSERT INTO {$table} (
@@ -756,7 +772,7 @@ class Strata extends SQLite3 {
 		$object = $parts[0];
 		$operator = $parts[1] ?? '=';
 
-		if (!in_array(strtolower($operator), ['=', '!=', 'like'])) {
+		if (!in_array(strtolower($operator), self::OPERATORS)) {
 			throw new StdException('invalid operator');
 		}
 
@@ -807,7 +823,12 @@ class Strata extends SQLite3 {
 	}
 
 	private function stripExp(string $exp) {
-		return ltrim($exp, '@$#');
+		return ltrim($exp, '!@$#');
+	}
+
+	private function expIsUnique(string $field) {
+		$pattern = '^!';
+		return preg_match("/{$pattern}/i", $field);
 	}
 
 	private function expIsIndex(string $field) {

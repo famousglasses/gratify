@@ -6,7 +6,7 @@ function GratifyCManager() {
 	/**
 	 * Spawn a new component.
 	 */
-	this.spawn = function(template, options) {
+	this.spawn = function(template, options, defer_create) {
 		var id, htdoc, htargs, target, parent;
 		try {
 			asert(template, 'object');
@@ -19,6 +19,7 @@ function GratifyCManager() {
 			parent = typeof options.parent === 'object' ? options.parent : null;
 			asert(options.target, ['undefined', 'object', 'string']);
 			target = options.target || target;
+			defer_create = Boolean(defer_create);
 		} catch (ex) {
 			return gratify.error(ex.message, 'CManager::spawn');
 		}
@@ -39,59 +40,9 @@ function GratifyCManager() {
 			gratify.say('spawning new component <' + id + '>');
 			var component = new GratifyComponent(template);
 			component.$id = id;
+			component.$options = options;
 			_this.components[id] = component;
-
-			if (htdoc) {
-				var before = Boolean(htdoc.indexOf('--before') !== -1);
-
-				gratify.request('get ' + htdoc, htargs, function(r) {
-					component.$container = $(r);
-					component.$container.attr('id', id);
-					component.$stems = [];
-
-					var stems = component.$container.find('.-dev-stem').toArray();
-					if (stems.length) {
-						stems.reverse();
-						for (var s = 0; s < stems.length; s++) {
-							stems[s].classList.remove('-dev-stem');
-							component.$stems.push(stems[s]);
-							if (stems[s].parentNode) {
-								stems[s].parentNode.removeChild(stems[s]);
-							}
-						}
-					}
-
-					if (component.$container.is('.-dev-stem')) {
-						component.$container.removeAttr('id');
-						component.$container.removeClass('-dev-stem');
-						component.$stems.push(component.$container[0]);
-						component.$container = null;
-					}
-
-					component.$stems.reverse();
-
-					if (parent) {
-						component.$parent = parent;
-					}
-
-					if (target) {
-						if (!component.$target) {
-							component.$target = target;
-						}
-
-						if (component.$container) {
-							component.$container.find('.-dev-stem').remove();
-							if (before) {
-								component.$container.prependTo(target);
-							} else {
-								component.$container.appendTo(target);
-							}
-						}
-					}
-
-					component.$create(options);
-				});
-			} else {
+			if (!defer_create) {
 				component.$create(options);
 			}
 		} catch (ex) {

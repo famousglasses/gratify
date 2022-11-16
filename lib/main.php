@@ -9,10 +9,11 @@ use \Exception;
 
 // Initial error reporting state -- this is
 // modified later in respect to your env config
-error_reporting(E_ALL);
+error_reporting(E_ALL & ~E_NOTICE);
 ini_set('display_errors', '1');
 
 define('_ROOT', realpath(__DIR__ . '/..'));
+define('_APP', _ROOT . '/app');
 define('_LIB', _ROOT . '/lib');
 define('_PUBLIC', _ROOT . '/public');
 define('_TEMPLATES', _ROOT . '/templates');
@@ -85,7 +86,14 @@ if (_CLI) {
 		error("at least 3 parameters required, only {$argc} passed");
 	}
 
-	$route_parts = ['', $argv[1], $argv[2]];
+	$argx = [];
+	for ($i = 1; $i < count($argv); $i++) {
+		if (strpos($argv[$i], '-') === 0) {
+			continue;
+		}
+		$argx[] = $argv[$i];
+	}
+	$route_parts = array_merge([''], $argx);
 } else {
 	$len = strlen('lib/main.php');
 	$root = rtrim(substr($_SERVER['PHP_SELF'], 0, strlen($_SERVER['PHP_SELF']) - $len), '/');
@@ -98,18 +106,23 @@ if (_CLI) {
 $route = rtrim(implode('/', $route_parts), '/');
 array_shift($route_parts);
 if (count($route_parts) > 2) {
-	$subdir = $route_parts[0] ?? '';
-	$service = $route_parts[1] ?? '';
-	$function = $route_parts[2] ?? '';
+	$subdirs = array_splice($route_parts, 0, count($route_parts) - 2);
+	$service = $route_parts[0] ?? '';
+	$function = $route_parts[1] ?? '';
 } else {
-	$subdir = '';
+	$subdirs = [];
 	$service = $route_parts[0] ?? '';
 	$function = $route_parts[1] ?? '';
 }
 
+$subspace = '';
+foreach ($subdirs as $subdir) {
+	$subspace .= '\\' . getServiceClass($subdir);
+}
+
 $service = $service ? $service : $_ENV['DEFAULT_SERVICE'];
 $function = $function ? $function : $_ENV['DEFAULT_FUNCTION'];
-$namespace = 'App\Services' . ($subdir ? '\\' . getServiceClass($subdir) : '');
+$namespace = 'App\Services' . $subspace;
 $method = getServiceMethod($function);
 $class = getServiceClass($service);
 
@@ -124,10 +137,26 @@ if ($service === $_ENV['SYSTEM_SERVICE']) {
 // the requested one does not exist.
 if (!_CLI && $_ENV['STRICT_ROUTES'] == false) {
 	if (!class_exists("{$namespace}\\{$class}")) {
-		$service = $_ENV['DEFAULT_SERVICE'];
-		$function = $_ENV['DEFAULT_FUNCTION'];
-		$method = getServiceMethod($function);
-		$class = getServiceClass($service);
+		// Check for dot strict files
+		$dirs = explode('\\', $namespace);
+		array_shift($dirs);
+		$_dir = '';
+		$strict = false;
+		foreach ($dirs as $dir) {
+			$_dir .= '/' . $dir;
+			if (file_exists(_APP . $_dir . '/.strict')) {
+				$strict = true;
+				break;
+			}
+		}
+
+		if (!$strict) {
+			$namespace = 'App\Services';
+			$service = $_ENV['DEFAULT_SERVICE'];
+			$function = $_ENV['DEFAULT_FUNCTION'];
+			$method = getServiceMethod($function);
+			$class = getServiceClass($service);
+		}
 	}
 }
 
@@ -148,6 +177,29 @@ try {
 	$rm = $rc->getMethod($method);
 
 	if ($rm->isPublic()) {
+		if (!_CLI) {
+			$dc = $rm->getDocComment();
+			if ($dc) {
+				$pattern = "/\*\s*@([a-zA-Z]+)\s*([a-zA-Z0-9, ()_].*)/";
+				preg_match_all($pattern, $dc, $matches, PREG_PATTERN_ORDER);
+				if (count($matches) == 3) {
+					foreach ($matches[1] as $i => $tag) {
+						$tag = strtolower($tag);
+						$val = strtolower($matches[2][$i]);
+						switch ($tag) {
+							case 'http':
+								if (strtolower($_SERVER['REQUEST_METHOD']) != $val) {
+									throw new StdException("invalid request method");
+								}
+								break;
+						}
+					}
+				}
+			}
+		}
+
+		$app->boot();
+
 		if ($rc->getConstructor() === null) {
 			$object = $rc->newInstance();
 		} else {

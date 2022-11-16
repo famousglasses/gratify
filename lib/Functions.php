@@ -11,6 +11,7 @@ namespace Gratify;
  * @param string
  */
 function getServiceClass(string $name): string {
+	$name = str_replace('_', '-', $name);
 	$name = preg_replace('/[^a-z\d-]/', '', $name);
 	$parts = explode('-', $name);
 	$cased_parts = array_map(function($n) {

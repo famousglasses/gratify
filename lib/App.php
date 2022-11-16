@@ -40,10 +40,6 @@ class App {
 		$this->setTemplate($_ENV['DEFAULT_TEMPLATE']);
 
 		if ($_ENV['DEV_MODE']) {
-			$session = $this->getSession();
-			$browser = $session->browser->getName();
-			$os = $session->os->getName();
-
 			$this->getLogger()->out(strtoupper(_METHOD) . ' ' . (_CLI ? $route : $_SERVER['REQUEST_URI']) . ' FROM ' . _CLIENT . (!_CLI ? " {$os}/{$browser}" : ''));
 		}
 	}
@@ -54,6 +50,31 @@ class App {
 			$response_time = round((hrtime(true) - _STARTED_ON) / 1e+6, 2);
 			@$this->getLogger()->out("RESP IN {$response_time}ms");
 		}
+	}
+
+	public function boot(bool $force = false) {
+		static $is_booted = false;
+
+		if ($is_booted && !$force) {
+			return true;
+		}
+
+		$loaders = [];
+		$paths = glob(_APP . '/BootLoaders/*.php');
+
+		foreach ($paths as $path) {
+			$class = substr($path, strrpos($path, '/') + 1);
+			$class = substr($class, 0, strlen($class) - 4);
+			$class = 'App\\BootLoaders\\' . $class;
+			$loaders[] = $class;
+		}
+
+		foreach ($loaders as $loader) {
+			$loader::load($this);
+		}
+
+		$is_booted = true;
+		return true;
 	}
 
 	/**
@@ -109,10 +130,22 @@ class App {
 		];
 
 		if (_CLI) {
+			$shell = $this->getShell();
+
 			if ($errno) {
-				echo "Error {$errno}: {$error}" . PHP_EOL;
+				$shell->write("Error {$errno}: {$error}");
 				exit(1);
 			} else {
+				$shell->write("Result: ", false);
+				switch (gettype($payload)) {
+					case 'boolean':
+						$shell->write($payload ? 'TRUE' : 'FALSE');
+						break;
+					default:
+						var_dump($payload);
+						$shell->write('');
+						break;
+				}
 				exit(0);
 			}
 		}

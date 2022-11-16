@@ -17,6 +17,7 @@ function GratifyComponent(properties) {
 			case '$spawn':
 			case '$ready':
 			case '$rendered':
+			case '$options':
 				throw 'user cannot define ' + i;
 		}
 
@@ -29,18 +30,6 @@ function GratifyComponent(properties) {
 	}
 	if (!this.hasOwnProperty('$destroy')) {
 		this.$destroy = function() {};
-	}
-	if (this.hasOwnProperty('$htdoc')) {
-		this.$reset = function(callback) {
-			gratify.request('get ' + _this.$htdoc, (_this.$htargs || {}), function(r) {
-				_this.$container = $(r);
-				_this.$container.attr('id', _this.$id);
-
-				if (typeof callback === 'function') {
-					callback(_this.$container);
-				}
-			});
-		};
 	}
 	this.$spawn = function(template, options) {
 		asert(template, 'object');

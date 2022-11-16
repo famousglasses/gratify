@@ -5,6 +5,15 @@ declare(strict_types=1);
 namespace Gratify;
 
 class Shell {
+	const SH_BIN = '/usr/bin';
+	const SH_SYSTEMCTL = self::SH_BIN . '/systemctl';
+	const SH_PS = self::SH_BIN . '/ps';
+	const SH_PGREP = self::SH_BIN . '/pgrep';
+	const SH_GREP = self::SH_BIN . '/grep';
+	const SH_PHP = self::SH_BIN . '/php';
+	const SYSTEMD_SERVICES = [];
+	const SYSTEMD_ACTIONS = ['restart', 'status'];
+
 	/** @ignore */
 	private $owd;
 
@@ -27,7 +36,7 @@ class Shell {
 	public function __construct() {
 		$this->prefix = '';
 		$this->owd = $this->cwd = getcwd();
-		putenv('HISTCONTROL=ignoreboth');
+		$this->var('HISTCONTROL', 'ignoreboth');
 
 		foreach ($GLOBALS['argv'] ?? [] as $i => $arg) {
 			if ($i == 0) {
@@ -126,14 +135,21 @@ class Shell {
 	}
 
 	/**
+	 * Alias for out().
+	 */
+	public function write(string $text, bool $new_line = true) {
+		return $this->out($text, $new_line);
+	}
+
+	/**
 	 * Colorize a string of text. Colors include:
-	 *    white
-	 *    green
-	 *    red
-	 *    yellow
-	 *    blue
-	 *    cyan
-	 *    magenta
+	 *	white
+	 *	green
+	 *	red
+	 *	yellow
+	 *	blue
+	 *	cyan
+	 *	magenta
 	 *
 	 * @param string $text
 	 * @param string $foreground
@@ -263,6 +279,17 @@ class Shell {
 	}
 
 	/**
+	 * Set or get environment variable.
+	 */
+	public function var(string $name, string $value = null) {
+		if ($value !== null) {
+			return putenv("{$name}={$value}");
+		} else {
+			return getenv($name);
+		}
+	}
+
+	/**
 	 * Execute a command.
 	 *
 	 * @param string $cmd The command
@@ -275,6 +302,58 @@ class Shell {
 		} else {
 			return shell_exec(" {$cmd} 2>&1");
 		}
+	}
+
+	/**
+	 * Returns an array of processes matching the mattern.
+	 *
+	 * @param string $pattern A process name to match
+	 * @param bool $exact Use TRUE to match exact process name
+	 * @return array
+	 */
+	public function pgrep($pattern, $exact = false) {
+		if (!preg_match('/^[\w ]+$/', $pattern)) {
+			throw new StdException('pattern not allowed');
+		}
+
+		$cmd  = self::SH_PGREP;
+		$cmd .= !$exact ? ' -fl ' : ' -l ';
+		$cmd .= "'" . addslashes($pattern) . "' ";
+		$cmd .= '| grep -v "^$$ "';
+		$res = $this->exec($cmd);
+		if (!$res) {
+			return [];
+		} else {
+			return array_filter(explode(PHP_EOL, (string)$res));
+		}
+	}
+
+	/**
+	 * tbd
+	 *
+	 * @param int $pid A process id
+	 * @return string
+	 */
+	public function ps($pid = 0, string $options = '', string $grep = '') {
+		if (!is_numeric($pid)) {
+			throw new StdException('pid must be numeric');
+		}
+
+		if (!preg_match('/^[a-z\-]*$/', $options)) {
+			throw new StdException('options invalid');
+		}
+
+		if (!preg_match('/^[\w]*$/', $grep)) {
+			throw new StdException('grep invalid');
+		}
+
+		$cmd  = self::SH_PS;
+		$cmd .= ' -o command --no-headers';
+		$cmd .= $pid ? " -fp {$pid}" : "";
+		$cmd .= $options ? " {$options}" : "";
+		$cmd .= $grep ? " | grep '{$grep}'" : "";
+		$res = $this->exec($cmd);
+		return $res;
 	}
 }
 ?>

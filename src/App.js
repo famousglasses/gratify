@@ -11,7 +11,7 @@ function GratifyApp() {
 	this.cursor_y = 0;
 	this.version_tag = ''; // used as a tag when retreiving web resources
 	this.site_name = ''; // used in title generation
-	this.namespace = document; // app namespace container
+	this.root = document; // app root container
 
 	/**
 	 * Set the application's version tag.

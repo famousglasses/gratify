@@ -7,9 +7,12 @@ if (typeof jQuery === 'undefined') {
 	if ($ !== jQuery) {
 		$ = jQuery;
 	}
+	var config = {
+		loud: true
+	};
 	var gratify;
 	gratify = new GratifyMain();
 	gratify.version = __gfy_version__;
-	gratify.init();
+	gratify.init(config);
 }
 
