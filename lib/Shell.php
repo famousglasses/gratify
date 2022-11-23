@@ -125,6 +125,20 @@ class Shell {
 	}
 
 	/**
+	 * Write to STDOUT and exit.
+	 *
+	 * @param string $text
+	 * @param boolean $new_line If TRUE, new line will be appended to the output.
+	 */
+	public function kill(string $text = '', int $code = 1) {
+		if (!empty($text)) {
+			$this->out($text);
+		}
+
+		exit($code);
+	}
+
+	/**
 	 * Write to STDOUT.
 	 *
 	 * @param string $text
@@ -143,13 +157,13 @@ class Shell {
 
 	/**
 	 * Colorize a string of text. Colors include:
-	 *	white
-	 *	green
-	 *	red
-	 *	yellow
-	 *	blue
-	 *	cyan
-	 *	magenta
+	 *  white
+	 *  green
+	 *  red
+	 *  yellow
+	 *  blue
+	 *  cyan
+	 *  magenta
 	 *
 	 * @param string $text
 	 * @param string $foreground

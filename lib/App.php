@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 namespace Gratify;
+use \Exception;
 
 /**
  * The application handler.
@@ -93,7 +94,7 @@ class App {
 	 * @param string $name
 	 * @param mixed $value
 	 */
-	function getGlobal(string $name, $value) {
+	function getGlobal(string $name) {
 		return $this->globals[$name] ?? null;
 	}
 
@@ -171,7 +172,7 @@ class App {
 	 * @param string $template A valid template file
 	 * @param array $vars Replacement variables
 	 */
-	public function email(string $to, string $subject, array $vars = [], string $template = 'emails/simple.txt') {
+	public function email(string $to, string $subject, string $template = 'emails/simple.txt', array $vars = []) {
 		$file = _TEMPLATES . '/' . $template;
 
 		if (!file_exists($file)) {
@@ -196,7 +197,7 @@ class App {
 			$headers[] = 'Content-Type: text/plain; charset="UTF-8"';
 		}
 
-		mail($to, $subject, $body, implode("\r\n", $headers));
+		return mail($to, $subject, $body, implode("\r\n", $headers));
 	}
 
 	/**
@@ -314,6 +315,198 @@ class App {
 		}
 
 		return $this->logger;
+	}
+
+	/**
+ 	 * Assert variable type and value.
+ 	 *
+ 	 * @param mixed $var
+ 	 * @param string $type
+ 	 * @param mixed $value
+ 	 * @param string $desc
+ 	 */
+	public function assert($var, string $type, $value = null, string $desc = 'unknown') {
+		if (!preg_match('/^([a-z]+)([\+<>=\?]*)$/i', str_replace(' ', '', $type), $matches)) {
+			throw new StdException("'{$type}' is not a valid assertion");
+		}
+
+		$type = strtolower($matches[1]);
+		$operator = $matches[2] ? $matches[2] : '=';
+
+		// Aliasing for regex
+		if ($type == 'regex') {
+			$type = 'string';
+			$var = (string)$var;
+			$operator = '~';
+		}
+
+		/*
+		 * Types:     int(eger)
+		 *            string
+		 *            tstring
+		 *            bool(ean)
+		 *            array
+		 *            email
+		 *
+		 * Operators: +   non-empty
+		 *            =   equal to
+		 *            >   greater than
+		 *            >=  greater than or eq
+		 *            <=  less than or eq
+		 *            ?   null allowance
+		 */
+
+		try {
+			if (!($operator == '?' && $var === null)) {
+				switch ($type) {
+					case 'int':
+					case 'integer':
+						if (!is_int($var)) {
+							throw new Exception('is int');
+						}
+
+						if (!in_array($operator, ['=', '?']) && $value !== null) {
+							$value = (int)$value;
+							switch ($operator) {
+								case '>':
+									if (!($var > $value)) {
+										throw new Exception('is int greater than ' . $value);
+									}
+									break;
+								case '>=':
+									if (!($var >= $value)) {
+										throw new Exception('is int greater than or equal to ' . $value);
+									}
+									break;
+								case '<':
+									if (!($var < $value)) {
+										throw new Exception('is int less than ' . $value);
+									}
+									break;
+								case '<=':
+									if (!($var <= $value)) {
+										throw new Exception('is int less than ' . $value);
+									}
+									break;
+							}
+						}
+						break;
+					case 'number':
+					case 'numeric':
+						if (!is_numeric($var)) {
+							throw new Exception('is number');
+						}
+
+						if (!in_array($operator, ['=', '?']) && $value !== null) {
+							$value = round((float)$value, 3);
+							$var = round((float)$var, 3);
+							switch ($operator) {
+								case '>':
+									if (!($var > $value)) {
+										throw new Exception('is number greater than ' . $value);
+									}
+									break;
+								case '>=':
+									if (!($var >= $value)) {
+										throw new Exception('is number greater than or equal to ' . $value);
+									}
+									break;
+								case '<':
+									if (!($var < $value)) {
+										throw new Exception('is number less than ' . $value);
+									}
+									break;
+								case '<=':
+									if (!($var <= $value)) {
+										throw new Exception('is number less than ' . $value);
+									}
+									break;
+							}
+						}
+						break;
+					case 'array':
+						if (!is_array($var)) {
+							throw new Exception('is array');
+						}
+
+						if ($operator == '+') {
+							if (empty($var)) {
+								throw new Exception('is non-empty array');
+							}
+						}
+						break;
+					case 'string':
+					case 'tstring':
+						if (!is_string($var)) {
+							throw new Exception('is string');
+						}
+
+						if ($type == 'tstring') {
+							$var = trim($var);
+						}
+
+						if ($operator == '+') {
+							if (empty($var)) {
+								throw new Exception('is non-empty string');
+							}
+							$operator = '=';
+						} elseif ($operator == '~') {
+							if (!preg_match((string)$value, $var)) {
+								throw new Exception('is string matching regex ' . $value);
+							}
+						}
+						break;
+					case 'bool':
+					case 'boolean':
+						if (!is_bool($var)) {
+							throw new Exception('is bool');
+						}
+						break;
+					case 'email':
+						if (!filter_var($var, FILTER_VALIDATE_EMAIL)) {
+							throw new Exception('is email');
+						}
+						break;
+					default:
+						throw new Exception("'{$type}' is not a valid assertion");
+				}
+
+				if ($operator == '=') {
+					if ($value !== null) {
+						if (is_array($value)) {
+							if (!in_array($var, $value)) {
+								throw new Exception("value = [" . implode(",", $value) . "]");
+							}
+						} else {
+							if ($var != $value) {
+								throw new Exception("value = {$value}");
+							}
+						}
+					}
+				}
+			}
+		} catch (Exception $e) {
+			$type = gettype($var);
+			if ($type == 'NULL') {
+				$hint = $type;
+			} elseif ($type == 'string') {
+				$hint = "$type('$var')";
+			} else {
+				$hint = "$type($var)";
+			}
+
+			throw new StdException("var {{$desc}} failed assertion: value {$hint} {$e->getMessage()}");
+		}
+
+		return $var;
+	}
+
+	public function redirect(string $url, int $http_code = 302) {
+		if (_CLI) {
+			die("client redirect to: {$url}");
+		}
+
+		die(header("Location: {$url}", true, $http_code));
 	}
 }
 

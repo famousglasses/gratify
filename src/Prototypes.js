@@ -87,6 +87,21 @@ if (!String.prototype.appendVersionTag) {
 	};
 }
 
+if (!String.prototype.isValidUrl) {
+	String.prototype.isValidUrl = function(proto) {
+		proto = proto || 'https';
+		proto = proto + ":";
+
+		try {
+			url = new URL(String(this));
+		} catch (e) {
+			return false;
+		}
+
+		return url.protocol == proto;
+	};
+}
+
 /**
  * Converts a number into human readable byte-size string.
  */

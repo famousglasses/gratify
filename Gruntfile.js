@@ -13,7 +13,7 @@ module.exports = function(grunt) {
 			},
 			gratify: {
 				src: pkg.sources,
-				dest: '/tmp/gratify.js'
+				dest: 'public/gratify-latest-dev.js'
 			}
 		},
 		uglify: {
@@ -21,11 +21,11 @@ module.exports = function(grunt) {
 				banner: '/*! <%= pkg.name %> <%= pkg.version %> <%= grunt.template.today("yyyy-mm-dd h:mm TT") %> */\n',
 			},
 			gratify: {
-				src: '/tmp/gratify.js',
+				src: 'public/gratify-latest-dev.js',
 			 	dest: 'public/gratify-<%= pkg.version %>.min.js'
 			},
 			gratify_dev: {
-				src: '/tmp/gratify.js',
+				src: 'public/gratify-latest-dev.js',
 				dest: 'public/gratify-latest-dev.min.js'
 			}
 		},
@@ -35,6 +35,19 @@ module.exports = function(grunt) {
 					{src: 'public/gratify-<%= pkg.version %>.md5', dest: 'public/gratify-latest-dev.md5'}
 				]
 			}
+		},
+		less: {
+			main: {
+				options: {
+					strictMath: true
+				},
+				files: [{
+					expand: true,
+					src: ['plugins/**/style.less'],
+					ext: '.css',
+					extDot: 'first'
+				}]
+			}
 		}
 	});
 
@@ -42,5 +55,6 @@ module.exports = function(grunt) {
 	grunt.loadNpmTasks('grunt-contrib-concat');
 	grunt.loadNpmTasks('grunt-contrib-uglify');
 	grunt.loadNpmTasks('grunt-contrib-copy');
-	grunt.registerTask('default', ['jshint', 'concat', 'uglify', 'copy']);
+	grunt.loadNpmTasks('grunt-contrib-less');
+	grunt.registerTask('default', ['jshint', 'concat', 'uglify', 'copy', 'less']);
 };

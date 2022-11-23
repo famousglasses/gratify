@@ -6,20 +6,22 @@ function GratifyApp() {
 	this.params = {}; // parsed query params
 	this.path = document.location.pathname;
 	this.query = document.location.search;
+	this.base = ''; // document base path
 	this.zoomlvl = 100;
 	this.cursor_x = 0;
 	this.cursor_y = 0;
+	this.breakpoint = 'tiny';
 	this.version_tag = ''; // used as a tag when retreiving web resources
 	this.site_name = ''; // used in title generation
-	this.root = document; // app root container
+	this.root = document.body; // app root container
 
 	/**
 	 * Set the application's version tag.
 	 */
 	this.setVersionTag = function(tag) {
 		tag = String(tag);
-		if (!tag.match(/^[a-z\d]+$/)) {
-			return gratify.error('invalid tag value', 'App::setHash');
+		if (!tag.match(/^[a-z\d]+$/i)) {
+			return gratify.error('invalid tag value', 'App::setVersionTag');
 		}
 
 		_this.version_tag = tag;
@@ -35,8 +37,9 @@ function GratifyApp() {
 	/**
 	 * Add a new resource to the current document.
 	 */
-	this.include = function(type, url, id) {
+	this.include = function(type, url, id, extras) {
 		try {
+			extras = typeof extras === 'object' ? extras : {};
 			asert(type, 'string');
 			asert(url, 'string');
 		} catch (ex) {
@@ -49,15 +52,22 @@ function GratifyApp() {
 			case 'script':
 				resource = document.createElement('script');
 				resource.async = true;
-				resource.id = typeof id === 'string' ? id : undefined;
-				resource.src = url.appendAppHash();
+				if (extras.crossorigin) {
+					resource.crossorigin = String(extras.crossorigin);
+				}
+				if (typeof id === 'string') {
+					resource.id = id;
+				}
+				resource.src = url.appendVersionTag();
 				break;
 			case 'css':
 				resource = document.createElement('link');
 				resource.type = 'text/css';
 				resource.rel = 'stylesheet';
-				resource.id = typeof id === 'string' ? id : undefined;
-				resource.href = url.appendAppHash();
+				if (typeof id === 'string') {
+					resource.id = id;
+				}
+				resource.href = url.appendVersionTag();
 				break;
 			default:
 				return gratify.error('bad resource type', 'App::include');
@@ -100,8 +110,15 @@ function GratifyApp() {
 		}
 	};
 
+	this.gotoBase = function(reload) {
+		var dest = this.base ? this.base : '/';
+		gratify.goto(dest, false, reload);
+	};
+
 	(function() {
+		$(_this.root).addClass('tiny');
 		var $head = $('html > head');
+
 		if ($head.length) {
 			var $base = $head.find('base');
 			if ($base.length) {
@@ -118,23 +135,44 @@ function GratifyApp() {
 			try {
 				var width = parseInt(window.innerWidth);
 				width = isNaN(width) || width < 0 ? 0 : width;
-				var bp = 'xs';
-				if (width >= 1400) {
-					bp = 'xxl';
-				} else if (width >= 1200) {
-					bp = 'xl';
-				} else if (width >= 992) {
-					bp = 'lg';
-				} else if (width >= 768) {
-					bp = 'md';
-				} else if (width >= 576) {
-					bp = 'sm';
+				var bp = 'tiny';
+
+				if (width >= 400) {
+					bp = 'small';
 				}
+
+				if (width >= 1024) {
+					$(_this.root).addClass('standard');
+					bp = 'standard';
+				}
+
+				if (width >= 1920) {
+					bp = 'large';
+					$(_this.root).addClass('large');
+				}
+
+				if (bp != _this.breakpoint) {
+					$(_this.root).removeClass('standard');
+					$(_this.root).removeClass('large');
+					$(_this.root).removeClass('small');
+
+					if (bp == 'small') {
+						$(_this.root).addClass('small');
+					} else if (bp == 'standard') {
+						$(_this.root).addClass('small');
+						$(_this.root).addClass('standard');
+					} else if (bp == 'large') {
+						$(_this.root).addClass('small');
+						$(_this.root).addClass('standard');
+						$(_this.root).addClass('large');
+					}
+				}
+
 				_this.breakpoint = bp;
 			} catch (ex) {
-				_this.breakpoint = 'xs';
+				_this.breakpoint = 'tiny';
 			}
-		});
+		}).trigger('resize');
 
 		_this.sense(true);
 	})();

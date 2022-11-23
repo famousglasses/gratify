@@ -176,42 +176,50 @@ try {
 
 	$rm = $rc->getMethod($method);
 
-	if ($rm->isPublic()) {
-		if (!_CLI) {
-			$dc = $rm->getDocComment();
-			if ($dc) {
-				$pattern = "/\*\s*@([a-zA-Z]+)\s*([a-zA-Z0-9, ()_].*)/";
-				preg_match_all($pattern, $dc, $matches, PREG_PATTERN_ORDER);
-				if (count($matches) == 3) {
-					foreach ($matches[1] as $i => $tag) {
-						$tag = strtolower($tag);
-						$val = strtolower($matches[2][$i]);
-						switch ($tag) {
-							case 'http':
-								if (strtolower($_SERVER['REQUEST_METHOD']) != $val) {
-									throw new StdException("invalid request method");
-								}
-								break;
-						}
+	if (!$rm->isPublic()) {
+		throw new NotFoundException("function '{$method}' does not exist");
+	}
+
+	define('_FUNCTION', "{$namespace}\\{$class}::{$method}");
+
+	if (!_CLI) {
+		$dc = $rm->getDocComment();
+		if ($dc) {
+			$pattern = "/\*\s*@([a-zA-Z]+)\s*([a-zA-Z0-9, ()_].*)/";
+			preg_match_all($pattern, $dc, $matches, PREG_PATTERN_ORDER);
+
+			if (count($matches) == 3) {
+				foreach ($matches[1] as $i => $tag) {
+					$tag = strtolower(trim($tag));
+					$val = strtolower(trim($matches[2][$i]));
+					$val = preg_replace('/\s*\*\/$/', '', $val);
+
+					switch ($tag) {
+						case 'http':
+							$rqmeth = strtolower($_SERVER['REQUEST_METHOD']);
+							if ($rqmeth != $val) {
+								throw new StdException("request method '{$rqmeth}' not allowed");
+							}
+							break;
 					}
 				}
 			}
 		}
-
-		$app->boot();
-
-		if ($rc->getConstructor() === null) {
-			$object = $rc->newInstance();
-		} else {
-			$object = $rc->newInstance($app);
-		}
-
-		if (_CLI) {
-			$_REQUEST = $app->getShell()->getOptions();
-		}
-
-		$app->respond($object->{$method}($app, $_REQUEST));
 	}
+
+	if (_CLI) {
+		$_REQUEST = $app->getShell()->getOptions();
+	}
+
+	$app->boot();
+
+	if ($rc->getConstructor() === null) {
+		$object = $rc->newInstance();
+	} else {
+		$object = $rc->newInstance($app);
+	}
+
+	$app->respond($object->{$method}($app, $_REQUEST));
 } catch (StdException $e) {
 	$app->respond(null, max($e->getCode(), 1), $e->getMessage());
 

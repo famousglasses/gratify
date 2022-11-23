@@ -1,4 +1,9 @@
 var min_jq_ver = 3.1;
+var gratify;
+var config = {
+	loud: true
+};
+
 if (typeof jQuery === 'undefined') {
 	console.error('could not load gratify; missing jQuery');
 } else if (parseFloat(jQuery().jquery.substr(0, 3)) < min_jq_ver) {
@@ -7,12 +12,11 @@ if (typeof jQuery === 'undefined') {
 	if ($ !== jQuery) {
 		$ = jQuery;
 	}
-	var config = {
-		loud: true
-	};
-	var gratify;
-	gratify = new GratifyMain();
-	gratify.version = __gfy_version__;
-	gratify.init(config);
+
+	document.addEventListener('DOMContentLoaded', function() {
+		gratify = new GratifyMain();
+		gratify.version = __gfy_version__;
+		gratify.init(config);
+	});
 }
 

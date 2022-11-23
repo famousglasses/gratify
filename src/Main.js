@@ -44,6 +44,8 @@ function GratifyMain() {
 		_this.thread = new GratifyThread();
 		_this.web = new GratifyWeb();
 		_this.app = new GratifyApp();
+		_this.app.setVersionTag(btoa(_this.version).replace(/[^a-z\d]/i, ''));
+		_this.app.sense();
 		var uri = $gs.attr('src');
 		var system_service = $gs.attr('system-service') ? $gs.attr('system-service') : _this.default_system_service;
 		var matches = uri.match(/^(https?:\/\/[^\/]+\/)([a-z\d\-]*\/)?/i);
@@ -155,9 +157,10 @@ function GratifyMain() {
 	 *
 	 * @arg {string} route
 	 * @arg {string} push
+	 * @arg {boolean} reload
 	 */
-	this.goto = function(route, push) {
-		_this.router.goto(route, push);
+	this.goto = function(route, push, reload) {
+		_this.router.goto(route, push, reload);
 	};
 
 	/**
@@ -197,11 +200,13 @@ function GratifyMain() {
 		params = JSON.stringify(params || {}).replaceAll('"', '&quot;');
 		var $target = typeof target === 'string' ? $(target) : target;
 
-		if (!$target.length) {
+		var div = '<div gfy-plugin="' + plugin + '(' + params + ')"></div>';
+
+		if ($target === null) {
+			return div;
+		} else if (!$target.length) {
 			return _this.error("plugin target '" + target + "' does not exist");
 		}
-
-		var div = '<div gfy-plugin="' + plugin + '(' + params + ')"></div>';
 
 		switch (orientation.toLowerCase()) {
 			case 'append':
@@ -212,6 +217,8 @@ function GratifyMain() {
 				$target.html(div);
 				break;
 		}
+
+		return true;
 	};
 
 	/**

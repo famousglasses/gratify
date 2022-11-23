@@ -54,7 +54,7 @@ function error(string $msg) {
  * Print info about gratify.
  */
 function info() {
-	if (_CLI) {
+	if (!_CLI) {
 		echo '<div>';
 	}
 
@@ -69,7 +69,8 @@ function info() {
 		}
 	}
 
-	if (_CLI) {
+	if (!_CLI) {
 		echo '</div>';
 	}
 }
+

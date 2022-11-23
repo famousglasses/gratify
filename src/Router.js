@@ -73,11 +73,12 @@ function GratifyRouter() {
 	 * @arg {string} route a local url string (ex. /home)
 	 * @arg {string} push relating to the history state; as opposed to replace
 	 */
-	this.goto = function(route, push) {
+	this.goto = function(route, push, reload) {
 		var _this = this;
 
 		try {
 			push = typeof push === 'undefined' ? false : push;
+			reload = Boolean(reload);
 			asert(route, 'string');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Router::goto');
@@ -86,6 +87,13 @@ function GratifyRouter() {
 		// Cleanup route
 		var base = gratify.app.base ? gratify.app.base : '';
 		route = route.replace(base, '').replace(/\/+$/, '') || '/';
+
+		if (reload) {
+			gratify.say('relocating to ' + route);
+			document.location.href = route;
+			return;
+		}
+
 		if (route.indexOf('#') !== -1) {
 			route = route.split('#')[0];
 		}

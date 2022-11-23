@@ -351,7 +351,7 @@ class Strata extends SQLite3 {
 		return $ret;
 	}
 
-	public function delete(string $table, array $criteria = []): StrataResult {
+	public function delete(string $table, array $criteria = [], bool $permanent = false): StrataResult {
 		$e = $this->parseExp($table, false);
 
 		if (!$e['table'] || $e['prop'] != '*') {
@@ -359,10 +359,14 @@ class Strata extends SQLite3 {
 		}
 
 		if (!in_array($table, $this->tables)) {
-			throw new StdException('table does not exist');
+			throw new StdException("table '{$table}' does not exist");
 		}
 
-		$sql = "UPDATE {$e['table']} SET deleted = CURRENT_TIMESTAMP";
+		if ($permanent) {
+			$sql = "DELETE FROM {$e['table']}";
+		} else {
+			$sql = "UPDATE {$e['table']} SET deleted = CURRENT_TIMESTAMP";
+		}
 
 		$wheres = [];
 
@@ -589,7 +593,7 @@ class Strata extends SQLite3 {
 		}
 
 		if (!in_array($table, $this->tables)) {
-			throw new StdException('table does not exist');
+			throw new StdException("table '{$table}' does not exist");
 		}
 
 		$sql = "UPDATE {$e['table']} ";
@@ -652,7 +656,13 @@ class Strata extends SQLite3 {
 
 		$enclosure = 'value';
 		foreach ($sets['value'] as $k => $v) {
-			$v2 = is_numeric($v) ? $v : "'{$this->escape($v)}'";
+			if (is_numeric($v)) {
+				$v2 = $v;
+			} elseif (is_array($v) || is_object($v)) {
+				$v2 = "json('{$this->escape(json_encode($v))}')";
+			} else {
+				$v2 = "'{$this->escape($v)}'";
+			}
 
 			$enclosure = "JSON_SET({$enclosure}, '$.{$k}', {$v2})";
 		}

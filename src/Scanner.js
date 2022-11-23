@@ -18,7 +18,7 @@ function GratifyScanner() {
 		// Look for and add new elements
 		for (var i in _this.tags) {
 			var tag = _this.tags[i];
-			var $elems = $('[' + tag + ']');
+			var $elems = $(gratify.app.root).find('[' + tag + ']');
 
 			/* jshint ignore:start */
 			$elems.each(function(x, e) {
@@ -105,7 +105,7 @@ function GratifyScanner() {
 					params.json = 1;
 
 					/* jshint ignore:start */
-					seed = gratify.request('get ' + gratify.endpoint + '/plugin', params, function(r, s) {
+					seed = gratify.request('get ' + gratify.endpoint + '/plugin --cache --version', params, function(r, s) {
 						var $dest = $(_this.elements[_this.index_registry[s]]);
 
 						if ($dest.length == 0) {
@@ -134,7 +134,6 @@ function GratifyScanner() {
 								gratify.say('warning: no document head; plugin js/css will be skipped');
 							}
 
-							var root = gratify.app.root;
 							var meta = r.payload.meta;
 							var html = r.payload.html;
 							var css = r.payload.css;
@@ -154,7 +153,7 @@ function GratifyScanner() {
 
 							if (head) {
 								if (css) {
-									$(root).find('head').append('<style>' + css + '</style>');
+									$(document).find('head').append('<style>' + css + '</style>');
 								}
 
 								if (js) {

@@ -7,7 +7,6 @@ use \ReflectionClass;
 class System {
 	const VERSION = '1.0.0';
 	const SOURCE_GRATIFY = 'https://github.com/famousglasses/gratify.git';
-	private $cache = false; // todo implement
 
 	public function __construct() {
 		$app = getApp();
@@ -113,14 +112,14 @@ class System {
 		unset($info);
 		$ttl = $manifest['ttl'] ?? 0;
 
-		if ($this->cache && $ttl) {
+		if ($ttl) {
 			if (!preg_match('/^(\d+) (second|minute|hour|day)s?$/i', $ttl, $matches)) {
 				throw new Exception("invalid TTL defined '{$ttl}'");
 			}
 
 			$ttlNum = (int)$matches[1];
 			$ttlFactor = $matches[2];
-			$ttl = 0; // in minutes always
+			$ttl = 0; // in seconds always
 
 			if ($ttlNum <= 0) {
 				throw new Exception("cannot define null TTL");
@@ -128,37 +127,22 @@ class System {
 
 			switch ($ttlFactor) {
 				case 'second':
-					$ttl = $ttlNum / 60;
-					break;
-				case 'minute':
 					$ttl = $ttlNum;
 					break;
-				case 'hour':
+				case 'minute':
 					$ttl = $ttlNum * 60;
 					break;
+				case 'hour':
+					$ttl = $ttlNum * 60 * 60;
+					break;
 				case 'day':
-					$ttl = $ttlNum * 60 * 24;
+					$ttl = $ttlNum * 60 * 60 * 24;
 					break;
 			}
 
-			$session = $app->getSession();
-			$domain = ''; // client session (only for personal data) todo
-			$ckey = ''; // cache key
-			$cache = $app->getCache();
-
-			if (!$cache->open()) {
-				throw new Exception("cache error: {$cache->last_error}");
-			}
-
-			$ckey = md5($namespace . $plugin . $str);
-			$cval = $cache->get($ckey);
-
-			if (!empty($cval)) {
-				if (is_array($cval['meta'])) {
-					$cval['meta']['cached'] = true;
-				}
-				return $cval;
-			}
+			header("Cache-Control: private, max-age={$ttl}");
+		} else {
+			header("Cache-Control: no-cache");
 		}
 
 		if (!is_array($ds)) {
@@ -255,16 +239,41 @@ class System {
 
 		foreach ($filters as $key => $value) {
 			if (preg_match('/^([%\$])/', $value, $matches)) {
+				$nests = [];
 				$ref = substr($value, 1);
+
+				// Using nested (dot) notation
+				if (strpos($ref, '.') !== false) {
+					$parts = explode('.', $ref);
+					$ref = array_shift($parts);
+
+					foreach ($parts as $part) {
+						$part = trim($part);
+
+						if (empty($part)) {
+							continue;
+						}
+
+						$nests[] = $part;
+					}
+				}
 
 				switch ($matches[1]) {
 					case '%':
-						$x = $session->get($ref) ?? null;
+						$x = $session->get($ref);
 						break;
 					case '$':
 					default:
-						$x = $_REQUEST[$ref] ?? null;
+						$x = @$_REQUEST[$ref];
 						break;
+				}
+
+				if (count($nests)) {
+					foreach ($nests as $nest) {
+						if (is_array($x)) {
+							$x = $x[$nest] ?? null;
+						}
+					}
 				}
 
 				if ($x !== null) {
