@@ -10,6 +10,7 @@ function GratifyScanner() {
 	this.index_registry = {};
 	this.tags = [
 		'gfy-var',
+		'gfy-def',
 		'gfy-goto',
 		'gfy-plugin'
 	];
@@ -47,7 +48,7 @@ function GratifyScanner() {
 			var $e = $(_this.elements[i]);
 
 			// Dictionary event
-			var term = $e.attr('gfy-var');
+			var term = $e.attr('gfy-var') || $e.attr('gfy-def');
 			if (term) {
 				var data = gratify.def(term);
 				if ($e.html() != data) {
