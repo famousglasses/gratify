@@ -10,7 +10,7 @@ use \Exception;
 error_reporting(E_ALL & ~E_NOTICE);
 ini_set('display_errors', '1');
 
-require _ROOT . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 try {
 	loadConstants();
