@@ -38,16 +38,16 @@ class App {
 	public function __construct() {
 		global $route;
 
-		$this->setTemplate($_ENV['DEFAULT_TEMPLATE']);
+		$this->setTemplate($_ENV['DEFAULT_TEMPLATE'] ?? null);
 
-		if ($_ENV['DEV_MODE']) {
-			$this->getLogger()->out(strtoupper(_METHOD) . ' ' . (_CLI ? $route : $_SERVER['REQUEST_URI']) . ' FROM ' . _CLIENT . (!_CLI ? " {$os}/{$browser}" : ''));
+		if (getenv('DEV_MODE')) {
+			$this->getLogger()->out(strtoupper(_METHOD) . ' ' . (_CLI ? $route : $_SERVER['REQUEST_URI']) . ' FROM ' . _CLIENT);
 		}
 	}
 
 	/** @ignore */
 	public function __destruct() {
-		if ($_ENV['DEV_MODE']) {
+		if (getenv('DEV_MODE')) {
 			$response_time = round((hrtime(true) - _STARTED_ON) / 1e+6, 2);
 			@$this->getLogger()->out("RESP IN {$response_time}ms");
 		}
@@ -189,7 +189,7 @@ class App {
 		}
 
 		$headers[] = 'MIME-Version: 1.0';
-		$headers[] = 'From: ' . $_ENV['SITE_NAME'] . ' <' . $_ENV['ADMIN_EMAIL'] . '>';
+		$headers[] = 'From: ' . getenv('SITE_NAME') . ' <' . getenv('ADMIN_EMAIL') . '>';
 
 		if (preg_match('/.html?$/i', $template)) {
 			$headers[] = 'Content-Type: text/html; charset="UTF-8"';

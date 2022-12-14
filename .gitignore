@@ -3,4 +3,5 @@ vendor/
 package-lock.json
 composer.lock
 .env
+*.db
 
