@@ -347,6 +347,8 @@ class App {
 		 *            bool(ean)
 		 *            array
 		 *            email
+		 *            ipv4
+		 *            ipv6
 		 *
 		 * Operators: +   non-empty
 		 *            =   equal to
@@ -465,6 +467,21 @@ class App {
 					case 'email':
 						if (!filter_var($var, FILTER_VALIDATE_EMAIL)) {
 							throw new Exception('is email');
+						}
+						break;
+					case 'ipv4':
+						if (!filter_var($var, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+							throw new Exception('is ipv4 address');
+						}
+						break;
+					case 'ipv6':
+						if (!filter_var($var, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+							throw new Exception('is ipv6 address');
+						}
+						break;
+					case 'ip':
+						if (!filter_var($var, FILTER_VALIDATE_IP)) {
+							throw new Exception('is ip address');
 						}
 						break;
 					default:

@@ -144,14 +144,14 @@ class Shell {
 	 * @param string $text
 	 * @param boolean $new_line If TRUE, new line will be appended to the output.
 	 */
-	public function out(string $text, bool $new_line = true) {
+	public function out(string $text = '', bool $new_line = true) {
 		echo $this->prefix . $text . ($new_line ? PHP_EOL : '');
 	}
 
 	/**
 	 * Alias for out().
 	 */
-	public function write(string $text, bool $new_line = true) {
+	public function write(string $text = '', bool $new_line = true) {
 		return $this->out($text, $new_line);
 	}
 
