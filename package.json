@@ -1,6 +1,6 @@
 {
 	"name": "gratify",
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"author": "famousglasses",
 	"description": "A full stack web app framework.",
 	"devDependencies": {
@@ -16,18 +16,19 @@
 		"crypto": "~1.0.1"
 	},
 	"sources": [
-		"src/Functions.js",
-		"src/Prototypes.js",
-		"src/Main.js",
-		"src/Dictionary.js",
-		"src/CManager.js",
-		"src/Component.js",
-		"src/App.js",
-		"src/Web.js",
-		"src/Thread.js",
-		"src/Scanner.js",
-		"src/Client.js",
-		"src/Router.js",
-		"src/Init.js"
+		"sdk/Functions.js",
+		"sdk/Prototypes.js",
+		"sdk/Main.js",
+		"sdk/Dictionary.js",
+		"sdk/CManager.js",
+		"sdk/Component.js",
+		"sdk/App.js",
+		"sdk/Auth.js",
+		"sdk/Datasource.js",
+		"sdk/Web.js",
+		"sdk/Thread.js",
+		"sdk/Scanner.js",
+		"sdk/Router.js",
+		"sdk/Init.js"
 	]
 }

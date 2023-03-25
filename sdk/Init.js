@@ -1,7 +1,8 @@
 var min_jq_ver = 3.1;
 var gratify;
 var config = {
-	loud: true
+	loud: true,
+	auth_proto: 'cookie'
 };
 
 if (typeof jQuery === 'undefined') {
@@ -13,10 +14,16 @@ if (typeof jQuery === 'undefined') {
 		$ = jQuery;
 	}
 
-	document.addEventListener('DOMContentLoaded', function() {
+	var _gfy_init = function() {
 		gratify = new GratifyMain();
 		gratify.version = __gfy_version__;
 		gratify.init(config);
-	});
+	};
+
+	if (document.readyState !== "loading") {
+		_gfy_init();
+	} else {
+		window.addEventListener('DOMContentLoaded', _gfy_init);
+	}
 }
 

@@ -11,7 +11,7 @@ function GratifyWeb() {
 	 */
 	this.setWait = function(new_wait) {
 		try {
-			asert(new_wait, 'number');
+			assert(new_wait, 'number');
 		} catch (ex) {
 			gratify.error(ex.message, 'Web::setWait');
 		}
@@ -27,10 +27,10 @@ function GratifyWeb() {
 			params = typeof params === 'undefined' ? {} : params;
 			callback = typeof callback === 'undefined' ? function(){} : callback;
 			lastly = typeof lastly === 'undefined' ? function(){} : lastly;
-			asert(rqstring, 'string');
-			asert(params, 'object');
-			asert(callback, 'function');
-			asert(lastly, 'function');
+			assert(rqstring, 'string');
+			assert(params, 'object');
+			assert(callback, 'function');
+			assert(lastly, 'function');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Web::request');
 		}
@@ -44,9 +44,10 @@ function GratifyWeb() {
 		// Setup request options
 		var method = matches[1].toLowerCase();
 		var url = matches[2];
-		if (url.match(/^\//) && gratify.app.base) {
-			url = gratify.app.base + url;
-		}
+		// todo do we need this?
+		//if (url.match(/^\//) && gratify.app.base) {
+		//	url = gratify.app.base + url;
+		//}
 		var options = matches[3].trim().split(' ');
 		switch (method) {
 			case 'get':
@@ -62,9 +63,9 @@ function GratifyWeb() {
 
 		var cache = Boolean(options.indexOf('--cache') !== -1);
 		var version = Boolean(options.indexOf('--version') !== -1 || options.indexOf('-v') !== -1);
-		var async = Boolean(options.indexOf('--block') === -1);
-
+		var block = Boolean(options.indexOf('--block') === -1);
 		var seed = _this.genseed();
+
 		gratify.say('starting ' + method.toUpperCase() + ' request #' + seed + ' to ' + url);
 
 		var data = null;
@@ -81,17 +82,37 @@ function GratifyWeb() {
 			}
 		}
 
+		var headers = {};
+		var xhrFields = { withCredentials: true };
+
+		if (gratify.config.auth_proto == 'header') {
+			if (gratify.auth.token) {
+				headers.Authorization = 'Bearer ' + btoa(auth.token);
+			} else if (url.match(/session/)) {
+				headers.Authorization = 'Ask';
+			} else {
+				headers.Authorization = 'Guest';
+			}
+		}
+
+		// todo add auth_active flag to requests??
+
+		if (gratify.config.origin_delegate) {
+			headers['Origin-Delegate'] = gratify.config.origin_delegate;
+		}
+
 		// Send request
 		$.ajax({
 			url: version ? url.appendVersionTag() : url,
 			data: data,
 			method: method == 'get' ? 'get' : 'post',
-			async: async,
+			async: block,
 			cache: cache,
+			headers: headers,
 			contentType: method == 'file' ? false : 'application/x-www-form-urlencoded; charset=UTF-8',
 			processData: method == 'file' ? false : true,
 			dataType: 'text',
-			xhrFields: { withCredentials: true },
+			xhrFields: xhrFields,
 			success: function (response, status, xhr) {
 				gratify.say('#' + seed + ' responded ' + xhr.status + ' ' + xhr.statusText);
 

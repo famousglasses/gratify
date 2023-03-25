@@ -119,36 +119,6 @@ if (!Number.prototype.byteshr) {
 	};
 }
 
-if (!String.prototype.clipboard) {
-	String.prototype.clipboard = function() {
-		var text = String(this);
-		var $temp = $('<input>');
-		$('body').append($temp);
-		$temp.val(text).select();
-		document.execCommand('copy');
-		$temp.remove();
-		var $pop = $('<div class="gfy-text-copied">Text copied!</div>');
-		$pop.css({
-			position: 'fixed',
-			left: gratify.app.cursor_x + 3 + 'px',
-			top: gratify.app.cursor_y - 28 + 'px',
-			zIndex: 101,
-			fontSize: '12px',
-			opacity: 0.7
-		});
-		$('body').append($pop);
-		setTimeout(function() {
-			var ftime = 200;
-			setTimeout(function() {
-				$pop.fadeOut(ftime);
-				setTimeout(function() {
-					$pop.remove();
-				}, ftime);
-			}, ftime);
-		}, 300);
-	};
-}
-
 // jQuery extensions
 jQuery.fn.extend({
 	/**

@@ -1,5 +1,5 @@
-/*! gratify 1.0.0 2022-11-23 6:11 AM */ var __gfy_version__ = "1.0.0";
-function asert(x, type) {
+/*! gratify 2.0.0 2023-03-25 10:03 AM */ var __gfy_version__ = "2.0.0";
+function assert(x, type) {
 	if (typeof type === 'object' && type.indexOf) {
 		if (type.indexOf(typeof x) === -1) {
 			throw new TypeError("Bad parameter of type " + (typeof x) + ", expecting " + type.join(', '));
@@ -134,36 +134,6 @@ if (!Number.prototype.byteshr) {
 	};
 }
 
-if (!String.prototype.clipboard) {
-	String.prototype.clipboard = function() {
-		var text = String(this);
-		var $temp = $('<input>');
-		$('body').append($temp);
-		$temp.val(text).select();
-		document.execCommand('copy');
-		$temp.remove();
-		var $pop = $('<div class="gfy-text-copied">Text copied!</div>');
-		$pop.css({
-			position: 'fixed',
-			left: gratify.app.cursor_x + 3 + 'px',
-			top: gratify.app.cursor_y - 28 + 'px',
-			zIndex: 101,
-			fontSize: '12px',
-			opacity: 0.7
-		});
-		$('body').append($pop);
-		setTimeout(function() {
-			var ftime = 200;
-			setTimeout(function() {
-				$pop.fadeOut(ftime);
-				setTimeout(function() {
-					$pop.remove();
-				}, ftime);
-			}, ftime);
-		}, 300);
-	};
-}
-
 // jQuery extensions
 jQuery.fn.extend({
 	/**
@@ -183,13 +153,13 @@ jQuery.fn.extend({
 
 
 /* jshint laxbreak: true */
+/* jshint multistr: true */
 
 /**
  * Gratify main object template.
  */
 function GratifyMain() {
 	var _this = this;
-	this.default_system_service = 'sys';
 	this.ready = false;
 	this.config = {};
 	this.error_callback = null;
@@ -197,8 +167,14 @@ function GratifyMain() {
 	this.error_exists = false;
 	this.last_error = '';
 	this.endpoint = '';
-	this.authbound = false;
+	this.system_endpoint = '';
+	this.api_endpoint = '';
+	this.auth_endpoint = '';
+	this.img_path = '';
+	this.user_info = {};
 	this.components = {};
+	this.debug_css = false;
+	this.debug_active = false;
 
 	/**
 	 * Init routine.
@@ -209,7 +185,7 @@ function GratifyMain() {
 		}
 
 		try {
-			asert(config, ['object', 'undefined']);
+			assert(config, ['object', 'undefined']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::init');
 		}
@@ -224,17 +200,63 @@ function GratifyMain() {
 			return _this.error("could not locate gratify script tag", "Main::init");
 		}
 
+		_this.app = new GratifyApp();
+		var uri = $gs.attr('src');
+		var src_matches = uri.match(/^(https?:\/\/[^\/]+\/)([a-z\d\-]*\/)?/i);
+
+		if (src_matches) {
+			_this.endpoint = src_matches[1] + src_matches[2];
+		} else {
+			_this.endpoint = String(_this.app.base ? _this.app.base : '');
+		}
+
+		_this.endpoint = _this.endpoint.replace(/\/$/, '');
+		_this.img_path = _this.endpoint + '/public/img';
+		_this.system_endpoint = _this.endpoint + '/sys';
+		_this.api_endpoint = _this.endpoint + '/api';
+		_this.auth_endpoint = _this.api_endpoint + '/auth/oauth';
+		var arg_matches = uri.match(/\?[^\?]+$/i);
+
+		if (arg_matches) {
+			try {
+				var argstr = arg_matches[0].substring(1);
+				var args_raw = argstr.split('&');
+				var args = {};
+
+				if (args_raw.length) {
+					for (var a in args_raw) {
+						var kv = args_raw[a];
+						var kv_parts = kv.split('=');
+
+						if (kv_parts.length != 2) {
+							throw { message: "no value for key '" + kv[0] + "'" };
+						}
+
+						var key = kv_parts[0];
+						var val = kv_parts[1];
+						args[key] = val;
+					}
+
+					Object.assign(_this.config, args);
+				}
+			} catch (ex) {
+				gratify.error("found invalid inclusion arguments: " + ex.message, "Main::init");
+			}
+		}
+
+		var auth_protos = ['cookie', 'header'];
+
+		if ($.inArray(_this.config.auth_proto, auth_protos) === -1) {
+			return _this.error("bad config: unknown auth_proto '" + _this.config.auth_proto + "'; valid types are " + auth_protos.join(', '), 'Main::init');
+		}
+
 		_this.dictionary = new GratifyDictionary();
 		_this.thread = new GratifyThread();
-		_this.web = new GratifyWeb();
-		_this.app = new GratifyApp();
 		_this.app.setVersionTag(btoa(_this.version).replace(/[^a-z\d]/i, ''));
 		_this.app.sense();
-		var uri = $gs.attr('src');
-		var system_service = $gs.attr('system-service') ? $gs.attr('system-service') : _this.default_system_service;
-		var matches = uri.match(/^(https?:\/\/[^\/]+\/)([a-z\d\-]*\/)?/i);
-		_this.endpoint = String(matches ? matches[1] + matches[2] : (_this.app.base ? _this.app.base : '')).replace(/\/$/, '') + '/' + system_service;
-		_this.client = new GratifyClient();
+		_this.web = new GratifyWeb();
+		_this.auth = new GratifyAuth();
+		_this.datasource = new GratifyDatasource();
 		_this.cmanager = new GratifyCManager();
 		_this.scanner = new GratifyScanner();
 		_this.router = new GratifyRouter();
@@ -260,6 +282,7 @@ function GratifyMain() {
 		console.log('jquery version: ' + jQuery().jquery);
 		console.log('dictionary size: ' + JSON.stringify(_this.dictionary.definitions).length);
 		console.log('component count: ' + Object.keys(_this.cmanager.components).length);
+		console.log('subscriber count: ' + Object.keys(_this.datasource.subscribers).length);
 		console.log('thread count: ' + Object.keys(_this.thread.intervals).length);
 		console.log('thread density: ' + (function() {
 			var x = 0;
@@ -275,7 +298,7 @@ function GratifyMain() {
 	 */
 	this.setErrorCallback = function(callback) {
 		try {
-			asert(callback, 'function');
+			assert(callback, 'function');
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::setErrorCallback');
 		}
@@ -309,7 +332,7 @@ function GratifyMain() {
 	 * Say something to the console.
 	 */
 	this.say = function(message) {
-		if (_this.config.loud) {
+		if (Number(_this.config.loud)) {
 			console.log('Gratify says, "' + (
 				typeof message === 'object'
 				? JSON.stringify(message)
@@ -348,43 +371,24 @@ function GratifyMain() {
 	};
 
 	/**
-	 * Bind existing session auth to gratify.
+	 * Inject a plugin into the DOM.
 	 */
-	this.bindauth = function(sid, after) {
-		try {
-			asert(sid, 'string');
-			asert(after, ['undefined', 'function']);
-		} catch (ex) {
-			return _this.error(ex.message, 'Main::bindauth');
-		}
-
-		_this.request('post ' + _this.endpoint + '/bindauth', { sid: sid }, function(r) {
-			if (r.errno) {
-				return _this.error(r.error);
-			}
-
-			if (r.payload == true) {
-				_this.authbound = true;
-				_this.say('authorization success: ' + sid);
-			}
-		}, after);
-	};
-
 	this.plugin = function(target, plugin, params, orientation) {
 		try {
-			asert(target, ['string', 'object']);
-			asert(plugin, 'string');
-			asert(params, ['undefined', 'object']);
-			asert(orientation, ['undefined', 'string']);
+			assert(target, ['string', 'object']);
+			assert(plugin, 'string');
+			assert(params, ['undefined', 'object']);
+			assert(orientation, ['undefined', 'string']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::plugin');
 		}
 
 		orientation = String(orientation);
+		//params._rand = Math.floor(Math.random() * 9999) + 1;
 		params = JSON.stringify(params || {}).replaceAll('"', '&quot;');
 		var $target = typeof target === 'string' ? $(target) : target;
 
-		var div = '<div gfy-plugin="' + plugin + '(' + params + ')"></div>';
+		var div = '<div gratify-plugin="' + plugin + '(' + params + ')"></div>';
 
 		if ($target === null) {
 			return div;
@@ -395,6 +399,12 @@ function GratifyMain() {
 		switch (orientation.toLowerCase()) {
 			case 'append':
 				$target.append(div);
+				break;
+			case 'reload':
+				var classes = $target.attr('class');
+				$div = $(div);
+				$div.addClass(classes);
+				$target.replaceWith($div);
 				break;
 			default:
 			case 'replace':
@@ -410,9 +420,9 @@ function GratifyMain() {
 	 */
 	this.spawn = function(arg1, arg2, arg3) {
 		try {
-			asert(arg1, 'object');
-			asert(arg2, ['undefined', 'object']);
-			asert(arg3, ['undefined', 'boolean']);
+			assert(arg1, 'object');
+			assert(arg2, ['undefined', 'object']);
+			assert(arg3, ['undefined', 'boolean']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::spawn');
 		}
@@ -450,8 +460,8 @@ function GratifyMain() {
 	 */
 	this.waitFor = function(selector, callback) {
 		try {
-			asert(selector, 'string');
-			asert(callback, 'function');
+			assert(selector, 'string');
+			assert(callback, 'function');
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::waitFor');
 		}
@@ -477,6 +487,32 @@ function GratifyMain() {
 			i++;
 		}, thread_name, 0.2);
 	};
+
+	/**
+	 * Enable/disable debug mode.
+	 */
+	this.debug = function() {
+		if (!this.debug_css) {
+			$('head').append('\
+				<style>\
+					.gratify-debug {\
+						border: 2px solid red;\
+					}\
+				</style>\
+			');
+			this.debug_css = true;
+		}
+
+		var $plugins = $('[gratify-plugin]');
+
+		if (this.debug_active) {
+			$plugins.removeClass('gratify-debug');
+		} else {
+			$plugins.addClass('gratify-debug');
+		}
+
+		this.debug_active = !this.debug_active;
+	};
 }
 
 function GratifyDictionary() {
@@ -489,7 +525,7 @@ function GratifyDictionary() {
 	this.lookup = function(name) {
 		var parts;
 		try {
-			asert(name, 'string');
+			assert(name, 'string');
 			parts = _this.explode(name);
 		} catch (ex) {
 			return gratify.error(ex.message, 'Dictionary::lookup');
@@ -534,8 +570,8 @@ function GratifyDictionary() {
 	this.define = function(name, value) {
 		var parts;
 		try {
-			asert(name, 'string');
-			asert(value, ['string', 'object', 'number']);
+			assert(name, 'string');
+			assert(value, ['string', 'object', 'number']);
 			parts = _this.explode(name);
 		} catch (ex) {
 			return gratify.error(ex.message, 'Dictionary::define');
@@ -587,7 +623,7 @@ function GratifyDictionary() {
 				for (var c in gratify.cmanager.components) {
 					var component = gratify.cmanager.components[c];
 					if ($.inArray(name, component.$udefs) !== -1) {
-						gratify.cmanager.queue(component.$id);
+						gratify.cmanager.queue(component.$id, name, gratify.def(name));
 					}
 				}
 
@@ -621,15 +657,15 @@ function GratifyCManager() {
 	this.spawn = function(template, options, defer_create) {
 		var id, htdoc, htargs, target, parent;
 		try {
-			asert(template, 'object');
-			asert(template.$id, 'string');
+			assert(template, 'object');
+			assert(template.$id, 'string');
 			options = typeof options === 'object' ? options : {};
 			id = typeof options.id === 'string' ? options.id : template.$id;
 			htdoc = typeof template.$htdoc === 'string' ? template.$htdoc : null;
 			htargs = typeof template.$htargs === 'object' ? template.$htargs : {};
 			target = typeof template.$target === 'string' ? template.$target : null;
 			parent = typeof options.parent === 'object' ? options.parent : null;
-			asert(options.target, ['undefined', 'object', 'string']);
+			assert(options.target, ['undefined', 'object', 'string']);
 			target = options.target || target;
 			defer_create = Boolean(defer_create);
 		} catch (ex) {
@@ -698,22 +734,29 @@ function GratifyCManager() {
 	/**
 	 * Queue a component for updates.
 	 */
-	this.queue = function(id) {
+	this.queue = function(id, definition, content) {
 		if ($.inArray(id, _this.updateQueue) === -1) {
-			_this.updateQueue.push(id);
-			gratify.say('component ' + id + ' queued for update');
+			_this.updateQueue.push({
+				id: id,
+				definition: definition,
+				content: content
+			});
+
+			gratify.say('component ' + id + ' queued for update (' + definition + ')');
 		}
 	};
 
 	(function() {
 		gratify.thread.start(function() {
 			for (var i in _this.updateQueue) {
-				var cid = _this.updateQueue[i];
+				var cid = _this.updateQueue[i].id;
+				var definition = _this.updateQueue[i].definition;
+				var content = _this.updateQueue[i].content;
 				var component = gratify.get(cid);
 
 				
 				if (component) {
-					component.$update();
+					component.$update(definition, content);
 					gratify.say('component ' + component.$id + ' updated');
 				}
 
@@ -726,7 +769,7 @@ function GratifyCManager() {
 function GratifyComponent(properties) {
 	var _this = this;
 
-	asert(properties, 'object');
+	assert(properties, 'object');
 
 	// Validate and properties
 	for (var i in properties) {
@@ -737,12 +780,13 @@ function GratifyComponent(properties) {
 			case '$destroy':
 			case '$draw':
 			case '$update':
-				asert(property, 'function');
+				assert(property, 'function');
 				break;
 			case '$spawn':
 			case '$ready':
 			case '$rendered':
 			case '$options':
+			case '$reload':
 				throw 'user cannot define ' + i;
 		}
 
@@ -757,16 +801,19 @@ function GratifyComponent(properties) {
 		this.$destroy = function() {};
 	}
 	this.$spawn = function(template, options) {
-		asert(template, 'object');
+		assert(template, 'object');
 		options = typeof options === 'object' ? options : {};
 		return gratify.spawn(template, Object.assign(options, { parent: this }));
 	};
 	this.$ready = function(callback) {
-		asert(callback, 'function');
+		assert(callback, 'function');
 		gratify.waitFor('#' + this.$id, callback);
 	};
 	this.$rendered = function() {
 		return Boolean($('#' + this.$id).length);
+	};
+	this.$reload = function() {
+		gratify.plugin(this.$container.parent(), this.$pluginstr, this.$options, 'reload');
 	};
 
 	// The component manager will run $create()
@@ -780,16 +827,24 @@ function GratifyComponent(properties) {
 function GratifyApp() {
 	var _this = this;
 	this.params = {}; // parsed query params
+	this.host = document.location.host;
 	this.path = document.location.pathname;
 	this.query = document.location.search;
+	this.protocol = this.proto = document.location.protocol;
 	this.base = ''; // document base path
 	this.zoomlvl = 100;
 	this.cursor_x = 0;
 	this.cursor_y = 0;
 	this.breakpoint = 'tiny';
+	this.do_breakpoints = false;
+	this.base_strip_public = true; // small hack..
 	this.version_tag = ''; // used as a tag when retreiving web resources
 	this.site_name = ''; // used in title generation
 	this.root = document.body; // app root container
+	this.browser = 'unknown';
+	this.device = 'unknown';
+	this.platform = 'unknown';
+	this.platver = 'unknown';
 
 	/**
 	 * Set the application's version tag.
@@ -816,8 +871,8 @@ function GratifyApp() {
 	this.include = function(type, url, id, extras) {
 		try {
 			extras = typeof extras === 'object' ? extras : {};
-			asert(type, 'string');
-			asert(url, 'string');
+			assert(type, 'string');
+			assert(url, 'string');
 		} catch (ex) {
 			return gratify.error(ex.message, 'App::include');
 		}
@@ -892,13 +947,20 @@ function GratifyApp() {
 	};
 
 	(function() {
-		$(_this.root).addClass('tiny');
+		if (_this.do_breakpoints) {
+			$(_this.root).addClass('tiny');
+		}
+
 		var $head = $('html > head');
 
 		if ($head.length) {
 			var $base = $head.find('base');
 			if ($base.length) {
 				_this.base = $base.attr('href').replace(/\/+$/, '');
+
+				if (_this.base_strip_public) {
+					_this.base = _this.base.replace(/\/public$/, '');
+				}
 			}
 		}
 
@@ -907,51 +969,339 @@ function GratifyApp() {
 			_this.cursor_y = e.pageY;
 		});
 
-		$(window).on('resize', function(e) {
-			try {
-				var width = parseInt(window.innerWidth);
-				width = isNaN(width) || width < 0 ? 0 : width;
-				var bp = 'tiny';
+		if (_this.do_breakpoints) {
+			$(window).on('resize', function(e) {
+				try {
+					var width = parseInt(window.innerWidth);
+					width = isNaN(width) || width < 0 ? 0 : width;
+					var bp = 'tiny';
 
-				if (width >= 400) {
-					bp = 'small';
-				}
+					if (width >= 400) {
+						bp = 'small';
+					}
 
-				if (width >= 1024) {
-					$(_this.root).addClass('standard');
-					bp = 'standard';
-				}
-
-				if (width >= 1920) {
-					bp = 'large';
-					$(_this.root).addClass('large');
-				}
-
-				if (bp != _this.breakpoint) {
-					$(_this.root).removeClass('standard');
-					$(_this.root).removeClass('large');
-					$(_this.root).removeClass('small');
-
-					if (bp == 'small') {
-						$(_this.root).addClass('small');
-					} else if (bp == 'standard') {
-						$(_this.root).addClass('small');
+					if (width >= 1024) {
 						$(_this.root).addClass('standard');
-					} else if (bp == 'large') {
-						$(_this.root).addClass('small');
-						$(_this.root).addClass('standard');
+						bp = 'standard';
+					}
+
+					if (width >= 1920) {
+						bp = 'large';
 						$(_this.root).addClass('large');
 					}
-				}
 
-				_this.breakpoint = bp;
-			} catch (ex) {
-				_this.breakpoint = 'tiny';
+					if (bp != _this.breakpoint) {
+						$(_this.root).removeClass('standard');
+						$(_this.root).removeClass('large');
+						$(_this.root).removeClass('small');
+
+						if (bp == 'small') {
+							$(_this.root).addClass('small');
+						} else if (bp == 'standard') {
+							$(_this.root).addClass('small');
+							$(_this.root).addClass('standard');
+						} else if (bp == 'large') {
+							$(_this.root).addClass('small');
+							$(_this.root).addClass('standard');
+							$(_this.root).addClass('large');
+						}
+					}
+
+					_this.breakpoint = bp;
+				} catch (ex) {
+					_this.breakpoint = 'tiny';
+				}
+			}).trigger('resize');
+		}
+
+		var a = navigator.userAgent;
+
+		// Detect browser
+		if (a.match(/^Mozilla\/.+Edge\/.+$/)) {
+			_this.browser = 'edge';
+		} else if (a.match(/^Mozilla\/.+(Chrome\/|CriOS\/).+$/)) {
+			_this.browser = 'chrome';
+		} else if (a.match(/^Mozilla\/.+Trident\/.+$/)) {
+			_this.browser = 'ie';
+		} else if (a.match(/^Mozilla\/.+Gecko\/.+Firefox\/.+$/)) {
+			_this.browser = 'firefox';
+		} else if (a.match(/^Mozilla\/.+AppleWebKit\/.+Safari\/.+$/)) {
+			_this.browser = 'safari';
+		}
+
+		// Detect platform
+		if (a.match(/Windows NT/)) {
+			_this.platform = 'win';
+		} else if (a.match(/Android/)) {
+			_this.platform = 'android';
+		} else if (a.match(/(iOS|iPhone|iPad)/)) {
+			_this.platform = 'ios';
+		} else if (a.match(/Mac OS/)) {
+			_this.platform = 'mac';
+		} else if (a.match(/Linux/)) {
+			_this.platform = 'linux';
+		}
+
+		// Detect plat version
+		if (_this.platform == 'win') {
+			matches = a.match(/Windows NT ([\d\.]+)/);
+			if (matches) {
+				_this.platver = matches[1];
 			}
-		}).trigger('resize');
+		}
+
+		// Detect device
+		if ((a.match(/Tablet|iPad/) && _this.platform != 'win') ||
+			(_this.platform == 'android' && !a.match(/Mobile/))) {
+			_this.device = 'tablet';
+		} else if (a.match(/Mobile|iPhone/)) {
+			_this.device = 'phone';
+		} else if (_this.platform == 'win' || _this.platform == 'mac') {
+			_this.device = 'desktop';
+		}
 
 		_this.sense(true);
 	})();
+}
+
+/* jshint laxbreak: true */
+/* jshint multistr: true */
+
+/**
+ * Gratify main object template.
+ */
+function GratifyAuth() {
+	var _this = this;
+	this.active = Boolean(GRATIFY_AUTH_ACTIVE) || false;
+	this.token = '';
+	this.user_info = {};
+
+	/**
+	 * Authorize client with gratify system.
+	 */
+	this.authorize = function(params, after) {
+		try {
+			assert(params, ['object']);
+			assert(after, ['undefined', 'function']);
+		} catch (ex) {
+			return gratify.error(ex.message, 'Main::authorize');
+		}
+
+		var grant_type = params.grant_type || '';
+		var token = params.token || '';
+		params.scope = params.scope || 'id';
+		params.no_redirect = true;
+
+		// Re-authorization bool
+		// When no args are passed, we consider this a re-auth
+		var reauth = (token === undefined);
+
+		if (reauth) {
+			if (!_this.active) {
+				return gratify.error('client was never authorized; must call authorize() with arguments on first time', 'Main::authorize');
+			}
+
+			token = _this.token;
+
+			// Fetch new session id from endpoint
+			if (gratify.config.auth_proto != 'cookie') {
+				_this.registerEpSession(true);
+			}
+		}
+
+		// Pre-flight validation
+		if (!token) {
+			return gratify.error('token cannot be empty', 'Main::authorize');
+		}
+
+		gratify.request('post ' + gratify.auth_endpoint + '/get-token', params, function(r) {
+			if (r.errno) {
+				// Could not re-auth, clean up bindings
+				if (reauth) {
+					_this.active = false;
+					_this.token = '';
+				}
+
+				return gratify.error(r.error, 'Main::authorize');
+			}
+
+			// Auth success
+			_this.token = r.payload.access_token;
+			_this.active = true;
+			_this.user_info = JSON.parse(atob(r.payload.id_token));
+			_this.say('authorization success: ' + _this.token);
+		}, after);
+	};
+
+	/**
+	 * Get and register session id from auth server.
+	 * Mostly helpful for non-cookie auth types.
+	 */
+	this.registerId = function(block) {
+		var rqstring = 'get ' + gratify.auth_endpoint + '/my-id';
+
+		if (Boolean(block)) {
+			rqstring += ' --block';
+		}
+
+		gratify.web.request(rqstring, {}, function(r) {
+			if (r.errno) {
+				return gratify.error("could not register session id: " + r.error, "Main::registerId");
+			}
+
+			if (typeof r.payload.id !== 'string') {
+				return gratify.error("could not register session id: bad id returned", "Main::registerId");
+			}
+
+			_this.token = r.payload.id;
+			sessionStorage.gratify_token = _this.token;
+			gratify.say("session id registered: " + _this.token);
+		});
+	};
+
+	(function() {
+		// Register endpoint session
+		if (gratify.config.auth_proto != 'cookie') {
+			if (typeof sessionStorage.gratify_token === 'string') {
+				_this.token = sessionStorage.gratify_token;
+			}
+
+			_this.registerId(true);
+		}
+	})();
+}
+
+function GratifyDatasource() {
+	var _this = this;
+	this.subscribers = {};
+	this.threads = {};
+
+	this.subscribe = function(meta) {
+		try {
+			assert(meta, ['object']);
+			assert(meta.id, ['string']);
+			assert(meta.bind, ['string']);
+			assert(meta.interval, ['undefined', 'string']);
+			assert(meta.url, ['string']);
+			assert(meta.component_id, ['string', 'undefined']);
+		} catch (ex) {
+			return gratify.error(ex.message, 'Datasource::subscribe');
+		}
+
+		var id = meta.id;
+		var bind = meta.bind;
+		var interval = meta.interval || '';
+		var url = meta.url;
+		var component_id = meta.component_id || '';
+
+		if (!component_id) {
+			gratify.say('warning: headless datasource subscriber: ' + JSON.stringify(meta));
+			component_id = 'GLOBAL';
+		}
+
+		var dss = function() {
+			gratify.request('get ' + url, {}, function(r) {
+				if (r.errno) {
+					return gratify.error('datasource subscriber response error: ' + r.error);
+				}
+
+				_this.loadDss(id, r.payload);
+			});
+		};
+
+		if (interval) {
+			var int_matches = interval.match(/^([0-9]+)([sm])$/);
+
+			if (!int_matches) {
+				return gratify.error('invalid interval value', 'Datasource::subscribe');
+			}
+
+			var seconds = Number(int_matches[1]);
+
+			if (int_matches[2] == 'm') {
+				seconds = seconds * 60;
+			}
+
+			var start_thread = false;
+
+			if (typeof _this.subscribers[id] !== 'object') {
+				start_thread = true;
+				_this.subscribers[id] = {
+					thread_id: 0,
+					components: []
+				};
+			}
+
+			this.subscribers[id].components.push({
+				id: component_id,
+				bind: bind
+			});
+
+			if (start_thread) {
+				var thread_id = gratify.thread.start(dss, null, seconds);
+				_this.subscribers[id].thread_id = thread_id;
+			}
+		} else {
+			dss();
+		}
+	};
+
+	this.unsubscribe = function(mixed_id) {
+		if (!mixed_id) {
+			return gratify.error('invalid subscription id', 'Datasource::unsubscribe');
+		}
+
+		gratify.say("unsubscribing '" + mixed_id + "'");
+
+		// Stop all threads
+		for (var ds_id in _this.subscribers) {
+			var subscriber = _this.subscribers[ds_id];
+			var components = subscriber.components;
+			var thread_id = subscriber.thread_id;
+			var ds_match = false;
+
+			if (ds_id === mixed_id) {
+				ds_match = true;
+			}
+
+			var component_count = components.length;
+
+			for (var c in components) {
+				var component = components[c];
+				var component_id = component.id;
+				var sub_match = ds_match || (component_id === mixed_id);
+
+				if (sub_match) {
+					if (ds_match || component_count <= 1) {
+						gratify.thread.stop(thread_id);
+					}
+
+					delete _this.subscribers[ds_id].components[c];
+				}
+			}
+
+			_this.subscribers[ds_id].components = _this.subscribers[ds_id].components.filter(Boolean);
+			component_count = _this.subscribers[ds_id].components.length;
+
+			if (ds_match || component_count <= 0) {
+				delete _this.subscribers[ds_id];
+			}
+		}
+	};
+
+	this.loadDss = function(id, payload) {
+		for (var ds_id in this.subscribers) {
+			if (id === ds_id) {
+				var components = this.subscribers[ds_id].components;
+
+				for (var c in components) {
+					var component = components[c];
+					var bind = component.bind;
+					gratify.def(bind, payload);
+				}
+			}
+		}
+	};
 }
 
 /* jshint esversion: 6 */
@@ -967,7 +1317,7 @@ function GratifyWeb() {
 	 */
 	this.setWait = function(new_wait) {
 		try {
-			asert(new_wait, 'number');
+			assert(new_wait, 'number');
 		} catch (ex) {
 			gratify.error(ex.message, 'Web::setWait');
 		}
@@ -983,10 +1333,10 @@ function GratifyWeb() {
 			params = typeof params === 'undefined' ? {} : params;
 			callback = typeof callback === 'undefined' ? function(){} : callback;
 			lastly = typeof lastly === 'undefined' ? function(){} : lastly;
-			asert(rqstring, 'string');
-			asert(params, 'object');
-			asert(callback, 'function');
-			asert(lastly, 'function');
+			assert(rqstring, 'string');
+			assert(params, 'object');
+			assert(callback, 'function');
+			assert(lastly, 'function');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Web::request');
 		}
@@ -1000,9 +1350,10 @@ function GratifyWeb() {
 		// Setup request options
 		var method = matches[1].toLowerCase();
 		var url = matches[2];
-		if (url.match(/^\//) && gratify.app.base) {
-			url = gratify.app.base + url;
-		}
+		// todo do we need this?
+		//if (url.match(/^\//) && gratify.app.base) {
+		//	url = gratify.app.base + url;
+		//}
 		var options = matches[3].trim().split(' ');
 		switch (method) {
 			case 'get':
@@ -1018,9 +1369,9 @@ function GratifyWeb() {
 
 		var cache = Boolean(options.indexOf('--cache') !== -1);
 		var version = Boolean(options.indexOf('--version') !== -1 || options.indexOf('-v') !== -1);
-		var async = Boolean(options.indexOf('--block') === -1);
-
+		var block = Boolean(options.indexOf('--block') === -1);
 		var seed = _this.genseed();
+
 		gratify.say('starting ' + method.toUpperCase() + ' request #' + seed + ' to ' + url);
 
 		var data = null;
@@ -1037,17 +1388,37 @@ function GratifyWeb() {
 			}
 		}
 
+		var headers = {};
+		var xhrFields = { withCredentials: true };
+
+		if (gratify.config.auth_proto == 'header') {
+			if (gratify.auth.token) {
+				headers.Authorization = 'Bearer ' + btoa(auth.token);
+			} else if (url.match(/session/)) {
+				headers.Authorization = 'Ask';
+			} else {
+				headers.Authorization = 'Guest';
+			}
+		}
+
+		// todo add auth_active flag to requests??
+
+		if (gratify.config.origin_delegate) {
+			headers['Origin-Delegate'] = gratify.config.origin_delegate;
+		}
+
 		// Send request
 		$.ajax({
 			url: version ? url.appendVersionTag() : url,
 			data: data,
 			method: method == 'get' ? 'get' : 'post',
-			async: async,
+			async: block,
 			cache: cache,
+			headers: headers,
 			contentType: method == 'file' ? false : 'application/x-www-form-urlencoded; charset=UTF-8',
 			processData: method == 'file' ? false : true,
 			dataType: 'text',
-			xhrFields: { withCredentials: true },
+			xhrFields: xhrFields,
 			success: function (response, status, xhr) {
 				gratify.say('#' + seed + ' responded ' + xhr.status + ' ' + xhr.statusText);
 
@@ -1100,7 +1471,7 @@ function GratifyThread() {
 	 */
 	this.start = function(func, id, frequency) {
 		try {
-			asert(func, 'function');
+			assert(func, 'function');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Thread::start');
 		}
@@ -1109,7 +1480,17 @@ function GratifyThread() {
 			id = (new Date()).getTime();
 		}
 
-		if (typeof frequency !== 'number') {
+		if (Boolean(frequency)) {
+			frequency = String(frequency);
+			var f_matches = frequency.match(/^([0-9]+)?\.?([0-9]+)$/);
+
+			if (!f_matches) {
+				return gratify.error("bad frequency value '" + frequency + "'", "Thread::start");
+			}
+
+			frequency = Number(frequency);
+		} else {
+			gratify.say("warning: found non-numeric thread frequency; setting to 1");
 			frequency = 1;
 		}
 
@@ -1131,6 +1512,7 @@ function GratifyThread() {
 	 */
 	this.stop = function(id) {
 		if (typeof _this.intervals[id] !== 'undefined') {
+			gratify.say("stopping thread '" + id + "'");
 			clearInterval(_this.intervals[id].id);
 			delete _this.intervals[id];
 		}
@@ -1145,12 +1527,17 @@ function GratifyScanner() {
 	var _this = this;
 	this.absorb_rate = 0.2;
 	this.tick_rate = 0.25;
+	this.reauth_wait = 0.25;
+	this.reauth_count = 0;
+	this.reauth_max = 3;
+	this.max_elements_size = 1024; // max size of elements before starting gc
 	this.elements = [];
 	this.index_registry = {};
 	this.tags = [
-		'gfy-var',
-		'gfy-goto',
-		'gfy-plugin'
+		'gratify-var',
+		'gratify-def',
+		'gratify-goto',
+		'gratify-plugin'
 	];
 
 	gratify.thread.start(function() {
@@ -1161,66 +1548,99 @@ function GratifyScanner() {
 
 			/* jshint ignore:start */
 			$elems.each(function(x, e) {
-				if ($.inArray(e, _this.elements) === -1) {
-					_this.elements.push(e);
+				// Check for existing elements
+				for (var u in _this.elements) {
+					if (e === _this.elements[u].element) {
+						return;
+					}
+				}
+
+				var e_index = _this.elements.push({ element: e }) - 1;
+				gratify.say("scanner: new " + tag + " @ " + e.tagName + '-' + e_index);
+
+				if (e_index > _this.max_elements_size) {
+					gratify.say("scanner: elements size exceeded " + _this.max_elements_size + ".. garbage collecting empty indexes");
+					_this.elements = _this.elements.filter(elm => elm);
+					gratify.say("scanner: post-gc size = " + _this.elements.length);
 				}
 			});
 			/* jshint ignore:end */
-		}
-
-		// Drop deleted elements
-		for (var x in _this.elements) {
-			var checkme = gratify.app.root;
-			if (gratify.client.browser == 'ie' && checkme == document) {
-				checkme = document.body;
-			}
-
-			if (!checkme.contains(_this.elements[x])) {
-				_this.elements.splice(x, 1);
-			}
 		}
 	}, 'gratify-scanner-absorb-dom', this.absorb_rate);
 
 	gratify.thread.start(function() {
 		for (var i in _this.elements) {
-			var $e = $(_this.elements[i]);
+			var checkme = gratify.app.root;
+
+			if (gratify.app.browser == 'ie' && checkme == document) {
+				checkme = document.body;
+			}
+
+			// Drop deleted elements
+			if (!checkme.contains(_this.elements[i].element)) {
+				gratify.say("scanner: garbage collecting " + _this.elements[i].element.tagName + '-' + i);
+
+				if (_this.elements[i].plugin_ref) {
+					gratify.drop(_this.elements[i].plugin_ref);
+				}
+
+				gratify.datasource.unsubscribe(_this.elements[i].plugin_ref);
+
+				delete(_this.elements[i]);
+				continue;
+			}
+
+			var $e = $(_this.elements[i].element);
 
 			// Dictionary event
-			var term = $e.attr('gfy-var');
+			var term = $e.attr('gratify-var') || $e.attr('gratify-def');
 			if (term) {
 				var data = gratify.def(term);
 				if ($e.html() != data) {
+					gratify.say('poulating def ' + term);
 					$e.html(data);
 				}
 			}
 
 			// Navigation events
-			var nav = $e.attr('gfy-goto');
+			var nav = $e.attr('gratify-goto');
 			if (nav) {
-				if (!$e.prop('gfy-goto-active')) {
+				if (!$e.prop('gratify-goto-active')) {
 					/* jshint ignore:start */
-					$e.prop('gfy-goto-active', true).on('click', function() {
-						gratify.goto($(this).attr('gfy-goto'));
+					$e.prop('gratify-goto-active', true).on('click', function() {
+						gratify.goto($(this).attr('gratify-goto'));
 					});
 					/* jshint ignore:end */
 				}
 			}
 
-			var plugin = $e.attr('gfy-plugin');
+			var plugin = $e.attr('gratify-plugin');
 			if (plugin) {
-				if (!$e.prop('gfy-plugin-loaded')) {
-					var matches = plugin.match(/^([a-z\d-]+)\.([a-z\d-]+)(\((.*)\))?$/);
+				// Debug mode styling
+				if (gratify.debug_active) {
+					if (!$e.hasClass('gratify-debug')) {
+						$e.addClass('gratify-debug');
+					}
+				}
+
+				if (!$e.prop('gratify-plugin-loaded')) {
+					plugin = plugin.replace(/[\r\n]+/g, " ");
+					plugin = plugin.replace(/^\s+/, "");
+					plugin = plugin.replace(/\s+$/, "");
+					var matches = plugin.match(/^([a-z\d-]+)\.([a-z\d-]+)(\((.*)\))?$/i);
 
 					if (!matches) {
-						$e.prop('gfy-plugin-loaded', true);
+						$e.prop('gratify-plugin-loaded', true);
 						return gratify.error('invalid gratify plugin: ' + plugin);
 					}
 
-					if (String($e.attr('gfy-wait-for-auth')) === 'true') {
-						if (!gratify.authbound) {
-							return; // try again next time
+					if (String($e.attr('gratify-wait-for-auth')) === 'true') {
+						if (!gratify.auth.active) {
+							continue; // try again next time
 						}
 					}
+
+					gratify.say('scanner: loading plugin @ ' + $e.prop('tagName') + '-' + i);
 
 					var seed = 0;
 					var namespace = matches[1];
@@ -1229,9 +1649,10 @@ function GratifyScanner() {
 
 					if (params) {
 						try {
+							params = params.replace(/'+/g, "\"");
 							params = JSON.parse(params);
 						} catch (ex) {
-							gratify.error("could not parse plugin parameters: " + ex.message);
+							gratify.error("could not parse plugin parameters: " + ex.message + params);
 						}
 					}
 
@@ -1244,8 +1665,28 @@ function GratifyScanner() {
 					params.json = 1;
 
 					/* jshint ignore:start */
-					seed = gratify.request('get ' + gratify.endpoint + '/plugin --cache --version', params, function(r, s) {
-						var $dest = $(_this.elements[_this.index_registry[s]]);
+					seed = gratify.request('get ' + gratify.system_endpoint + '/plugin --cache --version', params, function(r, s) {
+						var e_index = _this.index_registry[s];
+						var $dest = $(_this.elements[e_index].element);
+
+						// Access denied, let's try and re-authorize
+						// todo double check this errno
+						if (r.errno == 3) {
+							if (gratify.auth.active && _this.reauth_count < _this.reauth_max) {
+								_this.reauth_count++;
+								gratify.say("session expired.. re-authorizing");
+								gratify.auth.authorize();
+
+								// Mark plugin for re-load
+								setTimeout(function() {
+									$dest.prop('gratify-plugin-loaded', false);
+								}, _this.reauth_wait);
+
+								return;
+							}
+						} else {
+							_this.reauth_count = 0;
+						}
 
 						if ($dest.length == 0) {
 							return gratify.error('destination element has gone away (seed#' + s + ')');
@@ -1284,7 +1725,9 @@ function GratifyScanner() {
 
 							var namespace = meta.namespace;
 							var component_name = meta.component_name;
-							var plugin_class = namespace + '-' + meta.plugin_name;
+							var plugin_class = (namespace + '-' + meta.plugin_name);
+							var plugin_str = namespace + '.' + meta.plugin_name;
+							var subscribers = meta.subscribers;
 
 							if (html) {
 								$dest.html(html);
@@ -1300,7 +1743,9 @@ function GratifyScanner() {
 										gratify.components[namespace] = {};
 									}
 
-									$(head).append('<script>' + js + '</script>');
+									if (typeof gratify.components[namespace][component_name] !== 'object') {
+										$(head).append('<script>' + js + '</script>');
+									}
 
 									var component = gratify.components[namespace][component_name];
 
@@ -1309,13 +1754,27 @@ function GratifyScanner() {
 									}
 
 									component.$id = component_name;
+									component.$pluginstr = plugin_str;
 									var obj = gratify.spawn(component, {}, true);
 
 									if (obj) {
 										obj.$container = $dest.find('.' + plugin_class);
 									}
 
-									obj.$create();
+									obj.$create(params);
+									_this.elements[e_index].plugin_ref = obj.$id;
+
+									// Subscribe to datasources
+									for (var s in subscribers) {
+										var meta = subscribers[s];
+										gratify.datasource.subscribe({
+											id: s,
+											url: meta.url,
+											interval: meta.interval || '',
+											bind: meta.bind,
+											component_id: obj.$id
+										});
+									}
 								}
 							}
 						} catch (ex) {
@@ -1324,7 +1783,7 @@ function GratifyScanner() {
 					});
 
 					_this.index_registry[seed] = i;
-					$e.prop('gfy-plugin-loaded', true);
+					$e.prop('gratify-plugin-loaded', true);
 					/* jshint ignore:end */
 				}
 			}
@@ -1332,66 +1791,6 @@ function GratifyScanner() {
 	}, 'gratify-scanner-event-handler', this.tick_rate);
 }
 
-
-function GratifyClient() {
-	var _this = this;
-	this.browser = 'unknown';
-	this.device = 'unknown';
-	this.platform = 'unknown';
-	this.platver = 'unknown';
-
-	this.isMobile = function() {
-		return (_this.device == 'phone' || _this.device == 'tablet');
-	};
-
-	(function() {
-		var a = navigator.userAgent;
-
-		// Detect browser
-		if (a.match(/^Mozilla\/.+Edge\/.+$/)) {
-			_this.browser = 'edge';
-		} else if (a.match(/^Mozilla\/.+(Chrome\/|CriOS\/).+$/)) {
-			_this.browser = 'chrome';
-		} else if (a.match(/^Mozilla\/.+Trident\/.+$/)) {
-			_this.browser = 'ie';
-		} else if (a.match(/^Mozilla\/.+Gecko\/.+Firefox\/.+$/)) {
-			_this.browser = 'firefox';
-		} else if (a.match(/^Mozilla\/.+AppleWebKit\/.+Safari\/.+$/)) {
-			_this.browser = 'safari';
-		}
-
-		// Detect platform
-		if (a.match(/Windows NT/)) {
-			_this.platform = 'win';
-		} else if (a.match(/Android/)) {
-			_this.platform = 'android';
-		} else if (a.match(/(iOS|iPhone|iPad)/)) {
-			_this.platform = 'ios';
-		} else if (a.match(/Mac OS/)) {
-			_this.platform = 'mac';
-		} else if (a.match(/Linux/)) {
-			_this.platform = 'linux';
-		}
-
-		// Detect plat version
-		if (_this.platform == 'win') {
-			matches = a.match(/Windows NT ([\d\.]+)/);
-			if (matches) {
-				_this.platver = matches[1];
-			}
-		}
-
-		// Detect device
-		if ((a.match(/Tablet|iPad/) && _this.platform != 'win') ||
-			(_this.platform == 'android' && !a.match(/Mobile/))) {
-			_this.device = 'tablet';
-		} else if (a.match(/Mobile|iPhone/)) {
-			_this.device = 'phone';
-		} else if (_this.platform == 'win' || _this.platform == 'mac') {
-			_this.device = 'desktop';
-		}
-	})();
-}
 
 /**
  * Provides component/url routing structure with 'goto'
@@ -1416,7 +1815,7 @@ function GratifyRouter() {
 		}
 
 		try {
-			asert(routes, 'object');
+			assert(routes, 'object');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Router::start');
 		}
@@ -1474,7 +1873,7 @@ function GratifyRouter() {
 		try {
 			push = typeof push === 'undefined' ? false : push;
 			reload = Boolean(reload);
-			asert(route, 'string');
+			assert(route, 'string');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Router::goto');
 		}
@@ -1635,7 +2034,8 @@ function GratifyRouter() {
 var min_jq_ver = 3.1;
 var gratify;
 var config = {
-	loud: true
+	loud: true,
+	auth_proto: 'cookie'
 };
 
 if (typeof jQuery === 'undefined') {
@@ -1647,10 +2047,16 @@ if (typeof jQuery === 'undefined') {
 		$ = jQuery;
 	}
 
-	document.addEventListener('DOMContentLoaded', function() {
+	var _gfy_init = function() {
 		gratify = new GratifyMain();
 		gratify.version = __gfy_version__;
 		gratify.init(config);
-	});
+	};
+
+	if (document.readyState !== "loading") {
+		_gfy_init();
+	} else {
+		window.addEventListener('DOMContentLoaded', _gfy_init);
+	}
 }
 

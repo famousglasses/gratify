@@ -1,0 +1,10 @@
+{
+	"name": "Example hello world",
+	"datasources": [
+		{
+			"name": "Example/Names",
+			"bind": "names"
+		}
+	]
+}
+

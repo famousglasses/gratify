@@ -9,15 +9,15 @@ function GratifyCManager() {
 	this.spawn = function(template, options, defer_create) {
 		var id, htdoc, htargs, target, parent;
 		try {
-			asert(template, 'object');
-			asert(template.$id, 'string');
+			assert(template, 'object');
+			assert(template.$id, 'string');
 			options = typeof options === 'object' ? options : {};
 			id = typeof options.id === 'string' ? options.id : template.$id;
 			htdoc = typeof template.$htdoc === 'string' ? template.$htdoc : null;
 			htargs = typeof template.$htargs === 'object' ? template.$htargs : {};
 			target = typeof template.$target === 'string' ? template.$target : null;
 			parent = typeof options.parent === 'object' ? options.parent : null;
-			asert(options.target, ['undefined', 'object', 'string']);
+			assert(options.target, ['undefined', 'object', 'string']);
 			target = options.target || target;
 			defer_create = Boolean(defer_create);
 		} catch (ex) {
@@ -86,22 +86,29 @@ function GratifyCManager() {
 	/**
 	 * Queue a component for updates.
 	 */
-	this.queue = function(id) {
+	this.queue = function(id, definition, content) {
 		if ($.inArray(id, _this.updateQueue) === -1) {
-			_this.updateQueue.push(id);
-			gratify.say('component ' + id + ' queued for update');
+			_this.updateQueue.push({
+				id: id,
+				definition: definition,
+				content: content
+			});
+
+			gratify.say('component ' + id + ' queued for update (' + definition + ')');
 		}
 	};
 
 	(function() {
 		gratify.thread.start(function() {
 			for (var i in _this.updateQueue) {
-				var cid = _this.updateQueue[i];
+				var cid = _this.updateQueue[i].id;
+				var definition = _this.updateQueue[i].definition;
+				var content = _this.updateQueue[i].content;
 				var component = gratify.get(cid);
 
 				
 				if (component) {
-					component.$update();
+					component.$update(definition, content);
 					gratify.say('component ' + component.$id + ' updated');
 				}
 

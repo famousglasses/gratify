@@ -8,7 +8,7 @@ function GratifyDictionary() {
 	this.lookup = function(name) {
 		var parts;
 		try {
-			asert(name, 'string');
+			assert(name, 'string');
 			parts = _this.explode(name);
 		} catch (ex) {
 			return gratify.error(ex.message, 'Dictionary::lookup');
@@ -53,8 +53,8 @@ function GratifyDictionary() {
 	this.define = function(name, value) {
 		var parts;
 		try {
-			asert(name, 'string');
-			asert(value, ['string', 'object', 'number']);
+			assert(name, 'string');
+			assert(value, ['string', 'object', 'number']);
 			parts = _this.explode(name);
 		} catch (ex) {
 			return gratify.error(ex.message, 'Dictionary::define');
@@ -106,7 +106,7 @@ function GratifyDictionary() {
 				for (var c in gratify.cmanager.components) {
 					var component = gratify.cmanager.components[c];
 					if ($.inArray(name, component.$udefs) !== -1) {
-						gratify.cmanager.queue(component.$id);
+						gratify.cmanager.queue(component.$id, name, gratify.def(name));
 					}
 				}
 

@@ -10,7 +10,7 @@ function GratifyThread() {
 	 */
 	this.start = function(func, id, frequency) {
 		try {
-			asert(func, 'function');
+			assert(func, 'function');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Thread::start');
 		}
@@ -19,7 +19,17 @@ function GratifyThread() {
 			id = (new Date()).getTime();
 		}
 
-		if (typeof frequency !== 'number') {
+		if (Boolean(frequency)) {
+			frequency = String(frequency);
+			var f_matches = frequency.match(/^([0-9]+)?\.?([0-9]+)$/);
+
+			if (!f_matches) {
+				return gratify.error("bad frequency value '" + frequency + "'", "Thread::start");
+			}
+
+			frequency = Number(frequency);
+		} else {
+			gratify.say("warning: found non-numeric thread frequency; setting to 1");
 			frequency = 1;
 		}
 
@@ -41,6 +51,7 @@ function GratifyThread() {
 	 */
 	this.stop = function(id) {
 		if (typeof _this.intervals[id] !== 'undefined') {
+			gratify.say("stopping thread '" + id + "'");
 			clearInterval(_this.intervals[id].id);
 			delete _this.intervals[id];
 		}

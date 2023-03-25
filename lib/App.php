@@ -343,12 +343,15 @@ class App {
 		/*
 		 * Types:     int(eger)
 		 *            string
-		 *            tstring
+		 *            tstring (trimmed string)
+		 *            istring (case-insensitive)
 		 *            bool(ean)
 		 *            array
 		 *            email
 		 *            ipv4
 		 *            ipv6
+		 *            url
+		 *            domain
 		 *
 		 * Operators: +   non-empty
 		 *            =   equal to
@@ -439,12 +442,26 @@ class App {
 						break;
 					case 'string':
 					case 'tstring':
+					case 'istring':
 						if (!is_string($var)) {
 							throw new Exception('is string');
 						}
 
 						if ($type == 'tstring') {
 							$var = trim($var);
+						}
+
+						// case-insensitive string conversion
+						if ($type == 'istring') {
+							$var = strtolower($var);
+
+							if (is_array($value)) {
+								$value = array_map(function($x) {
+									return strtolower((string)$x);
+								}, $value);
+							} elseif (is_string($value)) {
+								$value = strtolower($value);
+							}
 						}
 
 						if ($operator == '+') {
@@ -482,6 +499,16 @@ class App {
 					case 'ip':
 						if (!filter_var($var, FILTER_VALIDATE_IP)) {
 							throw new Exception('is ip address');
+						}
+						break;
+					case 'url':
+						if (!filter_var($var, FILTER_VALIDATE_URL)) {
+							throw new Exception('is url');
+						}
+						break;
+					case 'domain':
+						if (!filter_var($var, FILTER_VALIDATE_DOMAIN)) {
+							throw new Exception('is domain');
 						}
 						break;
 					default:

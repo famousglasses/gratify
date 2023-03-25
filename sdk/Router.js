@@ -21,7 +21,7 @@ function GratifyRouter() {
 		}
 
 		try {
-			asert(routes, 'object');
+			assert(routes, 'object');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Router::start');
 		}
@@ -79,7 +79,7 @@ function GratifyRouter() {
 		try {
 			push = typeof push === 'undefined' ? false : push;
 			reload = Boolean(reload);
-			asert(route, 'string');
+			assert(route, 'string');
 		} catch (ex) {
 			return gratify.error(ex.message, 'Router::goto');
 		}

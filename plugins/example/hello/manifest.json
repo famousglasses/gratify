@@ -1,9 +1,0 @@
-{
-	"name": "Hello Example Plugin",
-	"data": {
-		"names": {
-			"source": "Example/Names"
-		}
-	}
-}
-

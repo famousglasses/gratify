@@ -57,8 +57,9 @@ function loadConstants() {
 	define('_APP', _ROOT . '/app');
 	define('_LIB', _ROOT . '/lib');
 	define('_PUBLIC', _ROOT . '/public');
-	define('_TEMPLATES', _ROOT . '/templates');
-	define('_PLUGINS', _ROOT . '/plugins');
+	define('_TEMPLATES', _APP . '/Templates');
+	define('_DATASOURCES', _APP . '/Datasources');
+	define('_PLUGINS', _APP . '/WebPlugins');
 	define('_TEMP', '/tmp');
 	define('_CLI', php_sapi_name() === 'cli');
 	define('_METHOD', _CLI ? 'cli' : strtolower($_SERVER['REQUEST_METHOD']));

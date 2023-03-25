@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Gratify;
 use \Exception;
+use \Throwable;
 
 // Initial error reporting state -- this is
 // modified later in respect to your env config
 error_reporting(E_ALL & ~E_NOTICE);
 ini_set('display_errors', '1');
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/vendor/autoload.php';
 
 try {
 	loadConstants();
@@ -34,7 +35,7 @@ if (_CLI) {
 	}
 	$route_parts = array_merge([''], $argx);
 } else {
-	$len = strlen('lib/main.php');
+	$len = strlen('index.php');
 	$root = rtrim(substr($_SERVER['PHP_SELF'], 0, strlen($_SERVER['PHP_SELF']) - $len), '/');
 	$uri = str_replace($root, '', $_SERVER['REQUEST_URI']);
 	$url_path = substr($uri, 0, ($i = strpos($uri, '?')) !== false ? $i : strlen($uri));
@@ -81,6 +82,13 @@ if (!_CLI && $_ENV['STRICT_ROUTES'] == false) {
 		array_shift($dirs);
 		$_dir = '';
 		$strict = false;
+
+		// Also check class if not
+		// in a subspace
+		if (!$subspace) {
+			$dirs[] = $class;
+		}
+
 		foreach ($dirs as $dir) {
 			$_dir .= '/' . $dir;
 			if (file_exists(_APP . $_dir . '/.strict')) {
@@ -165,11 +173,12 @@ try {
 	if ($_ENV['DEV_MODE']) {
 		$app->getLogger()->out($e->getMessage());
 	}
-} catch (Exception $e) {
-	$app->respond(null, max($e->getCode(), 1), $e->getMessage());
+} catch (Throwable $t) {
+	$app->respond(null, max($t->getCode(), 1), $t->getMessage());
 
 	if ($_ENV['DEV_MODE']) {
-		$app->getLogger()->out($e->getMessage());
+		$app->getLogger()->out($t->getMessage());
 	}
 }
+
 

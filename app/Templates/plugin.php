@@ -18,7 +18,7 @@ $plugin = $content['meta']['plugin_name'];
 			<style><?= $content['css'] ?></style>
 		<?php } ?>
 		<script src="jquery-3.6.0.min.js"></script>
-		<script src="gratify-latest-dev.min.js"></script>
+		<script src="gratify-latest-dev.<?= $_ENV['DEV_MODE'] ? '' : 'min.' ?>js"></script>
 	</head>
 
 	<body>
@@ -42,4 +42,5 @@ $plugin = $content['meta']['plugin_name'];
 		</script>
 	<?php } ?>
 </html>
+
 

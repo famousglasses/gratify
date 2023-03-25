@@ -1,11 +1,11 @@
 /* jshint laxbreak: true */
+/* jshint multistr: true */
 
 /**
  * Gratify main object template.
  */
 function GratifyMain() {
 	var _this = this;
-	this.default_system_service = 'sys';
 	this.ready = false;
 	this.config = {};
 	this.error_callback = null;
@@ -13,8 +13,14 @@ function GratifyMain() {
 	this.error_exists = false;
 	this.last_error = '';
 	this.endpoint = '';
-	this.authbound = false;
+	this.system_endpoint = '';
+	this.api_endpoint = '';
+	this.auth_endpoint = '';
+	this.img_path = '';
+	this.user_info = {};
 	this.components = {};
+	this.debug_css = false;
+	this.debug_active = false;
 
 	/**
 	 * Init routine.
@@ -25,7 +31,7 @@ function GratifyMain() {
 		}
 
 		try {
-			asert(config, ['object', 'undefined']);
+			assert(config, ['object', 'undefined']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::init');
 		}
@@ -40,17 +46,63 @@ function GratifyMain() {
 			return _this.error("could not locate gratify script tag", "Main::init");
 		}
 
+		_this.app = new GratifyApp();
+		var uri = $gs.attr('src');
+		var src_matches = uri.match(/^(https?:\/\/[^\/]+\/)([a-z\d\-]*\/)?/i);
+
+		if (src_matches) {
+			_this.endpoint = src_matches[1] + src_matches[2];
+		} else {
+			_this.endpoint = String(_this.app.base ? _this.app.base : '');
+		}
+
+		_this.endpoint = _this.endpoint.replace(/\/$/, '');
+		_this.img_path = _this.endpoint + '/public/img';
+		_this.system_endpoint = _this.endpoint + '/sys';
+		_this.api_endpoint = _this.endpoint + '/api';
+		_this.auth_endpoint = _this.api_endpoint + '/auth/oauth';
+		var arg_matches = uri.match(/\?[^\?]+$/i);
+
+		if (arg_matches) {
+			try {
+				var argstr = arg_matches[0].substring(1);
+				var args_raw = argstr.split('&');
+				var args = {};
+
+				if (args_raw.length) {
+					for (var a in args_raw) {
+						var kv = args_raw[a];
+						var kv_parts = kv.split('=');
+
+						if (kv_parts.length != 2) {
+							throw { message: "no value for key '" + kv[0] + "'" };
+						}
+
+						var key = kv_parts[0];
+						var val = kv_parts[1];
+						args[key] = val;
+					}
+
+					Object.assign(_this.config, args);
+				}
+			} catch (ex) {
+				gratify.error("found invalid inclusion arguments: " + ex.message, "Main::init");
+			}
+		}
+
+		var auth_protos = ['cookie', 'header'];
+
+		if ($.inArray(_this.config.auth_proto, auth_protos) === -1) {
+			return _this.error("bad config: unknown auth_proto '" + _this.config.auth_proto + "'; valid types are " + auth_protos.join(', '), 'Main::init');
+		}
+
 		_this.dictionary = new GratifyDictionary();
 		_this.thread = new GratifyThread();
-		_this.web = new GratifyWeb();
-		_this.app = new GratifyApp();
 		_this.app.setVersionTag(btoa(_this.version).replace(/[^a-z\d]/i, ''));
 		_this.app.sense();
-		var uri = $gs.attr('src');
-		var system_service = $gs.attr('system-service') ? $gs.attr('system-service') : _this.default_system_service;
-		var matches = uri.match(/^(https?:\/\/[^\/]+\/)([a-z\d\-]*\/)?/i);
-		_this.endpoint = String(matches ? matches[1] + matches[2] : (_this.app.base ? _this.app.base : '')).replace(/\/$/, '') + '/' + system_service;
-		_this.client = new GratifyClient();
+		_this.web = new GratifyWeb();
+		_this.auth = new GratifyAuth();
+		_this.datasource = new GratifyDatasource();
 		_this.cmanager = new GratifyCManager();
 		_this.scanner = new GratifyScanner();
 		_this.router = new GratifyRouter();
@@ -76,6 +128,7 @@ function GratifyMain() {
 		console.log('jquery version: ' + jQuery().jquery);
 		console.log('dictionary size: ' + JSON.stringify(_this.dictionary.definitions).length);
 		console.log('component count: ' + Object.keys(_this.cmanager.components).length);
+		console.log('subscriber count: ' + Object.keys(_this.datasource.subscribers).length);
 		console.log('thread count: ' + Object.keys(_this.thread.intervals).length);
 		console.log('thread density: ' + (function() {
 			var x = 0;
@@ -91,7 +144,7 @@ function GratifyMain() {
 	 */
 	this.setErrorCallback = function(callback) {
 		try {
-			asert(callback, 'function');
+			assert(callback, 'function');
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::setErrorCallback');
 		}
@@ -125,7 +178,7 @@ function GratifyMain() {
 	 * Say something to the console.
 	 */
 	this.say = function(message) {
-		if (_this.config.loud) {
+		if (Number(_this.config.loud)) {
 			console.log('Gratify says, "' + (
 				typeof message === 'object'
 				? JSON.stringify(message)
@@ -164,43 +217,24 @@ function GratifyMain() {
 	};
 
 	/**
-	 * Bind existing session auth to gratify.
+	 * Inject a plugin into the DOM.
 	 */
-	this.bindauth = function(sid, after) {
-		try {
-			asert(sid, 'string');
-			asert(after, ['undefined', 'function']);
-		} catch (ex) {
-			return _this.error(ex.message, 'Main::bindauth');
-		}
-
-		_this.request('post ' + _this.endpoint + '/bindauth', { sid: sid }, function(r) {
-			if (r.errno) {
-				return _this.error(r.error);
-			}
-
-			if (r.payload == true) {
-				_this.authbound = true;
-				_this.say('authorization success: ' + sid);
-			}
-		}, after);
-	};
-
 	this.plugin = function(target, plugin, params, orientation) {
 		try {
-			asert(target, ['string', 'object']);
-			asert(plugin, 'string');
-			asert(params, ['undefined', 'object']);
-			asert(orientation, ['undefined', 'string']);
+			assert(target, ['string', 'object']);
+			assert(plugin, 'string');
+			assert(params, ['undefined', 'object']);
+			assert(orientation, ['undefined', 'string']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::plugin');
 		}
 
 		orientation = String(orientation);
+		//params._rand = Math.floor(Math.random() * 9999) + 1;
 		params = JSON.stringify(params || {}).replaceAll('"', '&quot;');
 		var $target = typeof target === 'string' ? $(target) : target;
 
-		var div = '<div gfy-plugin="' + plugin + '(' + params + ')"></div>';
+		var div = '<div gratify-plugin="' + plugin + '(' + params + ')"></div>';
 
 		if ($target === null) {
 			return div;
@@ -211,6 +245,12 @@ function GratifyMain() {
 		switch (orientation.toLowerCase()) {
 			case 'append':
 				$target.append(div);
+				break;
+			case 'reload':
+				var classes = $target.attr('class');
+				$div = $(div);
+				$div.addClass(classes);
+				$target.replaceWith($div);
 				break;
 			default:
 			case 'replace':
@@ -226,9 +266,9 @@ function GratifyMain() {
 	 */
 	this.spawn = function(arg1, arg2, arg3) {
 		try {
-			asert(arg1, 'object');
-			asert(arg2, ['undefined', 'object']);
-			asert(arg3, ['undefined', 'boolean']);
+			assert(arg1, 'object');
+			assert(arg2, ['undefined', 'object']);
+			assert(arg3, ['undefined', 'boolean']);
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::spawn');
 		}
@@ -266,8 +306,8 @@ function GratifyMain() {
 	 */
 	this.waitFor = function(selector, callback) {
 		try {
-			asert(selector, 'string');
-			asert(callback, 'function');
+			assert(selector, 'string');
+			assert(callback, 'function');
 		} catch (ex) {
 			return _this.error(ex.message, 'Main::waitFor');
 		}
@@ -292,5 +332,31 @@ function GratifyMain() {
 
 			i++;
 		}, thread_name, 0.2);
+	};
+
+	/**
+	 * Enable/disable debug mode.
+	 */
+	this.debug = function() {
+		if (!this.debug_css) {
+			$('head').append('\
+				<style>\
+					.gratify-debug {\
+						border: 2px solid red;\
+					}\
+				</style>\
+			');
+			this.debug_css = true;
+		}
+
+		var $plugins = $('[gratify-plugin]');
+
+		if (this.debug_active) {
+			$plugins.removeClass('gratify-debug');
+		} else {
+			$plugins.addClass('gratify-debug');
+		}
+
+		this.debug_active = !this.debug_active;
 	};
 }

@@ -1,10 +1,17 @@
 {
 	"name": "famousglasses/gratify",
 	"description": "A full stack web app framework.",
+	"type": "project",
+	"authors": [
+		{
+			"name": "famousglasses",
+		}
+	],
 	"require": {
 		"twig/twig": "^3.0",
 		"vlucas/phpdotenv": "^5.0",
-		"sinergi/browser-detector": "^6.1"
+		"sinergi/browser-detector": "^6.1",
+		"firebase/php-jwt": "^6.3"
 	},
 	"autoload": {
 		"psr-4": {
@@ -16,8 +23,6 @@
 		]
 	},
 	"scripts": {
-		"gratify": "php lib/main.php",
-		"gfy": "php lib/main.php"
+		"gratify": "php index.php"
 	}
 }
-

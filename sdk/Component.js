@@ -1,7 +1,7 @@
 function GratifyComponent(properties) {
 	var _this = this;
 
-	asert(properties, 'object');
+	assert(properties, 'object');
 
 	// Validate and properties
 	for (var i in properties) {
@@ -12,12 +12,13 @@ function GratifyComponent(properties) {
 			case '$destroy':
 			case '$draw':
 			case '$update':
-				asert(property, 'function');
+				assert(property, 'function');
 				break;
 			case '$spawn':
 			case '$ready':
 			case '$rendered':
 			case '$options':
+			case '$reload':
 				throw 'user cannot define ' + i;
 		}
 
@@ -32,16 +33,19 @@ function GratifyComponent(properties) {
 		this.$destroy = function() {};
 	}
 	this.$spawn = function(template, options) {
-		asert(template, 'object');
+		assert(template, 'object');
 		options = typeof options === 'object' ? options : {};
 		return gratify.spawn(template, Object.assign(options, { parent: this }));
 	};
 	this.$ready = function(callback) {
-		asert(callback, 'function');
+		assert(callback, 'function');
 		gratify.waitFor('#' + this.$id, callback);
 	};
 	this.$rendered = function() {
 		return Boolean($('#' + this.$id).length);
+	};
+	this.$reload = function() {
+		gratify.plugin(this.$container.parent(), this.$pluginstr, this.$options, 'reload');
 	};
 
 	// The component manager will run $create()

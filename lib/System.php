@@ -5,7 +5,7 @@ use \Exception;
 use \ReflectionClass;
 
 class System {
-	const VERSION = '1.0.0';
+	const VERSION = '2.0.0';
 	const SOURCE_GRATIFY = 'https://github.com/famousglasses/gratify.git';
 
 	public function __construct() {
@@ -61,60 +61,64 @@ class System {
 
 	public function plugin(App $app, array $request) {
 		if (@$request['json']) {
-			$app->setTemplate(null);
+			$app->setTemplate('json.php');
 		} else {
 			$app->setTemplate('plugin.php');
 		}
 
-		$namespace = @$request['namespace'];
-		$plugin = @$request['plugin'];
-		$component = str_replace(' ', '', ucwords(str_replace('-', ' ', $plugin)));
+		$namespace = $request['namespace'] ?? '';
 
 		if (!$namespace || !preg_match('/^[a-z][a-z\d-]+$/i', $namespace)) {
-			throw new Exception("invalid namespace");
+			throw new StdException("invalid namespace");
 		}
 
+		$plugin = $request['plugin'] ?? '';
+
 		if (!$plugin || !preg_match('/^[a-z][a-z\d-]+$/i', $plugin)) {
-			throw new Exception("invalid plugin name");
+			throw new StdException("invalid plugin name");
 		}
 
 		// Find plugin
 		$dir = _PLUGINS . "/{$namespace}/{$plugin}";
 		if (!is_dir($dir)) {
-			throw new Exception("plugin not found '{$namespace}.{$plugin}'");
+			throw new StdException("plugin not found '{$namespace}.{$plugin}'");
 		}
 
 		$path = $dir . '/manifest.json';
 		if (!file_exists($path)) {
-			throw new Exception("plugin manifest is missing");
+			throw new StdException("plugin manifest is missing");
 		}
 
 		$manifest = json_decode(file_get_contents($path), true);
 
 		if (!$manifest) {
-			throw new Exception("plugin manifest invalid");
+			throw new StdException("plugin manifest invalid");
 		}
 
-		$str = ''; // a basic string, used for cache key
-		$ds = $manifest['data'] ?? [];
+		$datasources = $manifest['datasources'] ?? [];
+		$subscribers = [];
 
-		// Review and encirch data sources
-		foreach ($ds as $name => &$info) {
-			$str .= $name;
-			if (is_array(@$info['filters'])) {
-				$info['filters'] = $this->enrichFilters($app, $info['filters']);
-				foreach ($info['filters'] as $x => $y) {
-					$str .= $x . $y; // concat for request hash
-				}
+		// Review and encirch datasources
+		foreach ($datasources as $i => &$meta) {
+			if (!is_array($meta)) {
+				throw new StdException('datasource config error in manifest.json');
+			}
+
+			if (is_array(@$meta['filters'])) {
+				$meta['filters'] = $this->enrichFilters($app, $meta['filters']);
+			}
+
+			if (is_array(@$meta['triggers'])) {
+				$meta['triggers'] = $this->enrichTriggers($app, $meta['triggers']);
 			}
 		}
 
-		unset($info);
+		unset($meta);
 		$ttl = $manifest['ttl'] ?? 0;
 
 		if ($ttl) {
 			if (!preg_match('/^(\d+) (second|minute|hour|day)s?$/i', $ttl, $matches)) {
-				throw new Exception("invalid TTL defined '{$ttl}'");
+				throw new StdException("invalid TTL defined '{$ttl}'");
 			}
 
 			$ttlNum = (int)$matches[1];
@@ -122,7 +126,7 @@ class System {
 			$ttl = 0; // in seconds always
 
 			if ($ttlNum <= 0) {
-				throw new Exception("cannot define null TTL");
+				throw new StdException("cannot define null TTL");
 			}
 
 			switch ($ttlFactor) {
@@ -143,10 +147,11 @@ class System {
 			header("Cache-Control: private, max-age={$ttl}");
 		} else {
 			header("Cache-Control: no-cache");
-		}
-
-		if (!is_array($ds)) {
-			throw new Exception("invalid data sources defined");
+			header('Expires: on, 01 Jan 1970 00:00:00 GMT');
+			header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+			header('Cache-Control: no-store, no-cache, must-revalidate');
+			header('Cache-Control: post-check=0, pre-check=0', false);
+			header('Pragma: no-cache');
 		}
 
 		// Setup return array
@@ -160,41 +165,87 @@ class System {
 
 		if (file_exists($template)) {
 			// This will be used to fill our twig template
-			$template_array = ['component' => "gratify.get('{$component}')"];
+			$template_array = [
+				'component' => "gratify.get('{$plugin}')",
+				'base_uri' => getenv('BASE_URI'),
+				'img_url' => Util::url('/public/img')
+			];
 
-			// Fetch data sources
-			foreach ($ds as $name => $info) {
-				$template_array[$name] = [];
-				$source = $info['source'] ?? null;
-				$filters = $info['filters'] ?? [];
+			// Fetch datasources
+			foreach ($datasources as $i => $meta) {
+				$bind = $meta['bind'];
+				$template_array[$bind] = [];
+				$ds_name = $meta['name'] ?? null;
+				$filters = $meta['filters'] ?? [];
+				$triggers = $meta['triggers'] ?? [];
+				$subscriber = $meta['subscriber'] ?? [];
 
-				if (!$source) {
-					throw new Exception("invalid data source config");
+				if (!$ds_name) {
+					throw new StdException("invalid datasource config: missing name");
 				}
 
-				if (!preg_match('/^[a-z][a-z\d]+\/[a-z][a-z\d]+$/i', $source)) {
-					throw new Exception("invalid data source '{$source}'");
+				if (!preg_match('/^[a-z][a-z\d]+\/[a-z][a-z\d]+$/i', $ds_name)) {
+					throw new StdException("invalid datasource config: invalid name");
 				}
 
-				$parts = explode('/', $source);
-				$class = "App\Datasources\\{$parts[0]}";
+				$parts = explode('/', $ds_name);
+				$class = $parts[0];
+				$nsclass = "App\Datasources\\{$class}";
 				$func = $parts[1];
 
 				try {
-					$rc = new ReflectionClass($class);
+					$rc = new ReflectionClass($nsclass);
 					$method = $rc->getMethod($func);
 				} catch (Exception $e) {
-					throw new Exception("unknown data source '{$class}/{$func}'");
+					throw new StdException("unknown datasource '{$class}/{$func}'");
 				}
 
-				try {
-					$obj = new $class($app);
-					$data = $obj->{$func}($app, $filters);
-				} catch (Exception $e) {
-					throw new Exception("data source error: {$e->getMessage()}");
-				}
+				if (!empty($subscriber)) {
+					$bind = $subscriber['bind'] ?? '';
+					$interval = $subscriber['interval'] ?? '';
 
-				$template_array[$name] = $data;
+					if (!preg_match('/^[a-z\d\._]+$/i', $bind)) {
+						throw new StdException("invalid subscriber binding");
+					}
+
+					if (!empty($interval)) {
+						if (!preg_match('/^(\d+)([sm])$/i', (string)$interval)) {
+							throw new StdException("invalid subscriber interval");
+						}
+					}
+
+					$url_params = [
+						'name' => $ds_name
+					];
+
+					if (!empty($filters)) {
+						$url_params['filters'] = $filters;
+					}
+
+					if (!empty($triggers)) {
+						$_triggers = [];
+
+						foreach ($triggers as $key => $value) {
+							$_triggers[] = $key;
+						}
+
+						$url_params['triggers'] = implode(',', $_triggers);
+					}
+
+					$subscriber_key = md5(print_r($url_params, true));
+					$subscriber_url = Util::url('/sys/datasource', $url_params);
+					$subscriber['url'] = $subscriber_url;
+					$subscribers[$subscriber_key] = $subscriber;
+				} else {
+					try {
+						$obj = new $nsclass($app);
+						$data = $obj->{$func}($app, $filters, $triggers);
+					} catch (Exception $e) {
+						throw new StdException("datasource error: {$e->getMessage()}");
+					}
+
+					$template_array[$bind] = $data;
+				}
 			}
 
 			$loader = new \Twig\Loader\FilesystemLoader($dir);
@@ -222,7 +273,8 @@ class System {
 			'cached' => false,
 			'ttl' => $ttl,
 			'namespace' => $namespace,
-			'component_name' => $component,
+			'component_name' => $plugin,
+			'subscribers' => $subscribers,
 			'plugin_name' => $plugin,
 			'plugin_uri' => "https://{$_SERVER['HTTP_HOST']}{$_ENV['BASE_URI']}{$_ENV['SYSTEM_SERVICE']}/plugin?namespace={$namespace}&plugin={$plugin}"
 		];
@@ -234,12 +286,104 @@ class System {
 		return $ret;
 	}
 
-	private function enrichFilters(App $app, array $filters) {
-		$session = $app->getSession();
+	public function datasource(App $app, array $request) {
+		$app->setTemplate('json.php');
 
-		foreach ($filters as $key => $value) {
-			if (preg_match('/^([%\$])/', $value, $matches)) {
-				$nests = [];
+		$name = $request['name'] ?? '';
+		$filters = $request['filters'] ?? [];
+		$triggers = $request['triggers'] ?? [];
+
+		if (empty($name)) {
+			throw new StdException("invalid datasource name");
+		}
+
+		$dspattern = '/^([a-z\d_]+)\/([a-z\d_]+)$/i';
+
+		if (!preg_match($dspattern, $name, $matches)) {
+			throw new StdException("invalid datasource name");
+		}
+
+		$class = $matches[1];
+		$func = $matches[2];
+
+		if (!empty($filters)) {
+			// Temp array
+			$_filters = [];
+
+			if (!is_array($filters)) {
+				throw new StdException('invalid filters');
+			}
+
+			foreach ($filters as $key => $value) {
+				$_filters[] = [
+					'name' => $key,
+					'value' => (string)$value
+				];
+			}
+
+			// Enrich and reassign filters
+			$filters = $this->enrichFilters($app, $_filters);
+		}
+
+		if (!empty($triggers)) {
+			// Temp array
+			$_triggers = [];
+
+			if (is_array($triggers)) {
+				foreach ($triggers as $key => $value) {
+					$_triggers[] = [
+						'name' => $key
+					];
+				}
+			} elseif (is_string($triggers)) {
+				$triggers = explode(',', $triggers);
+
+				foreach ($triggers as $key => $value) {
+					$_triggers[] = [
+						'name' => $value
+					];
+				}
+			} else {
+				throw new StdException('invalid triggers');
+			}
+
+			// Enrich and reassign triggers
+			$triggers = $this->enrichTriggers($app, $_triggers);
+		}
+
+		// Check if exists
+		$file = _DATASOURCES . "/{$class}.php";
+		if (!is_file($file)) {
+			throw new StdException("datasource not found '{$class}/{$func}'");
+		}
+
+		try {
+			$nsclass = "App\\Datasources\\{$class}";
+			$rc = new ReflectionClass($nsclass);
+			$method = $rc->getMethod($func);
+		} catch (Exception $e) {
+			throw new StdException("datasource not found '{$class}/{$func}'");
+		}
+
+		try {
+			$obj = new $nsclass($app);
+			$data = $obj->{$func}($app, $filters, $triggers);
+		} catch (Exception $e) {
+			throw new StdException("datasource error: {$e->getMessage()}");
+		}
+
+		return $data;
+	}
+
+	private function enrichFilters(App $app, array $filters) {
+		$rich_filters = [];
+
+		foreach ($filters as $i => $meta) {
+			$name = $meta['name'];
+			$nests = [];
+			$value = $meta['value'];
+
+			if (preg_match('/^\$/', $value, $matches)) {
 				$ref = substr($value, 1);
 
 				// Using nested (dot) notation
@@ -258,15 +402,7 @@ class System {
 					}
 				}
 
-				switch ($matches[1]) {
-					case '%':
-						$x = $session->get($ref);
-						break;
-					case '$':
-					default:
-						$x = @$_REQUEST[$ref];
-						break;
-				}
+				$x = $_REQUEST[$ref] ?? null;
 
 				if (count($nests)) {
 					foreach ($nests as $nest) {
@@ -275,15 +411,73 @@ class System {
 						}
 					}
 				}
+			} else {
+				$x = $value;
+			}
 
-				if ($x !== null) {
-					$filters[$key] = $x;
-				} else {
-					unset($filters[$key]);
+			$req = (bool)($meta['required'] ?? false);
+
+			if ($req) {
+				if (empty($x)) {
+					throw new StdException("required datasource filter is missing: {$meta['name']}");
 				}
+			}
+
+			if ($x !== null) {
+				$rich_filters[$name] = $x;
 			}
 		}
 
-		return $filters;
+		return $rich_filters;
+	}
+
+	private function enrichTriggers(App $app, array $triggers) {
+		$rich_triggers = [];
+
+		foreach ($triggers as $i => $meta) {
+			$nests = [];
+			$ref = $meta['name'];
+
+			// Using nested (dot) notation
+			if (strpos($ref, '.') !== false) {
+				$parts = explode('.', $ref);
+				$ref = array_shift($parts);
+
+				foreach ($parts as $part) {
+					$part = trim($part);
+
+					if (empty($part)) {
+						continue;
+					}
+
+					$nests[] = $part;
+				}
+			}
+
+			$session = $app->getSession();
+			$x = $session->get($ref) ?? null;
+
+			if (count($nests)) {
+				foreach ($nests as $nest) {
+					if (is_array($x)) {
+						$x = $x[$nest] ?? null;
+					}
+				}
+			}
+
+			$req = (bool)($meta['required'] ?? false);
+
+			if ($req) {
+				if (empty($x)) {
+					throw new StdException("required datasource trigger is missing: {$ref}");
+				}
+			}
+
+			if ($x !== null) {
+				$rich_triggers[$ref] = $x;
+			}
+		}
+
+		return $rich_triggers;
 	}
 }
